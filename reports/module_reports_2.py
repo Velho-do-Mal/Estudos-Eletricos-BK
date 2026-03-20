@@ -1,0 +1,659 @@
+# reports/module_reports_2.py
+# ====================================================================
+# Geradores de conteudo — Modulos 6 a 13
+# ====================================================================
+
+from __future__ import annotations
+from typing import Any, Dict, List
+import math
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
+from .bk_docx import BKReport
+from . import omml
+from .module_reports import (
+    SOFTWARE_NOTE,
+    REFS_SHIELDING, REFS_VMAX, REFS_COORD, REFS_RECLOSING, REFS_EMI, REFS_PF,
+)
+
+
+# ====================================================================
+# 6. BLINDAGEM (SHIELDING)
+# ====================================================================
+
+def report_blindagem(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
+    rpt.add_cover("Estudo de Blindagem contra Descargas Atmosféricas", "Linha de Transmissão")
+    rpt.add_page_break()
+    rpt.add_heading1("Sumário")
+    rpt.add_toc()
+    rpt.add_page_break()
+
+    rpt.add_heading1("Introdução")
+    rpt.add_body(
+        "A blindagem contra descargas atmosféricas é um requisito fundamental no projeto de "
+        "linhas de transmissão de alta tensão, visando proteger os condutores fase contra "
+        "incidência direta de raios e minimizar as taxas de desligamento por backflashover. "
+        "A eficácia da blindagem depende do posicionamento dos cabos-guarda em relação às fases "
+        "e da resistência de aterramento das torres."
+    )
+    rpt.add_body(
+        "A metodologia segue o modelo eletrogeométrico (EGM) conforme IEEE Std 1243-1997 "
+        "e IEEE Std 998-2012, complementado pela análise de backflashover conforme publicações "
+        "do CIGRÉ. Os critérios de ângulo de blindagem e taxa de flashover são avaliados para "
+        "garantir o desempenho desejado da linha."
+    )
+    rpt.add_body(
+        "Relatório produzido pelo Software BK Estudos Elétricos da BK Engenharia e Tecnologia."
+    )
+
+    rpt.add_heading1("Objetivo")
+    rpt.add_body(
+        "Verificar a eficácia da blindagem dos cabos-guarda na proteção dos condutores fase "
+        "contra incidência direta de descargas atmosféricas, avaliando os ângulos de proteção "
+        "e a taxa de backflashover."
+    )
+
+    rpt.add_heading1("Metodologia")
+    rpt.add_body(
+        "O ângulo de blindagem é calculado para cada fase em relação ao cabo-guarda mais próximo:"
+    )
+    rpt.add_equation(omml.eq_shielding_angle(), "Ângulo de blindagem")
+    rpt.add_body(
+        "Onde d_h é a distância horizontal entre a fase e o cabo-guarda, e Δh é a diferença "
+        "de altura. O ângulo deve ser inferior ao limite especificado (tipicamente 20° a 30°, "
+        "conforme IEEE 1243)."
+    )
+    rpt.add_body("A tensão na torre durante backflashover é estimada por:")
+    rpt.add_equation(omml.eq_vtower(), "Tensão na torre (backflashover)")
+    rpt.add_body(
+        "Onde I_desc é a corrente de descarga, R_pe é a resistência de aterramento e "
+        "L·dI/dt representa a contribuição indutiva durante a frente de onda."
+    )
+
+    # Resultados
+    rpt.add_heading1("Resultados Obtidos")
+    worst = results.get("worst_theta_deg", 0)
+    all_prot = results.get("all_phases_protected", False)
+    bf = results.get("backflash_fraction", 0)
+
+    rpt.add_kpi_table([
+        ("Pior ângulo", f"{worst:.1f}", "°"),
+        ("Todas protegidas", "SIM" if all_prot else "NÃO", ""),
+        ("Fração backflash", f"{bf:.4f}", ""),
+    ])
+
+    # Tabela por fase
+    if "per_phase" in results:
+        headers = ["Circuito", "Fase", "θ (°)", "Cabo GW", "Δh (m)", "d_horiz (m)", "Protegida"]
+        rows = []
+        for ph in results["per_phase"]:
+            rows.append([
+                str(ph.get("circuit", "")),
+                ph.get("phase", ""),
+                f"{ph.get('theta_deg', 0):.1f}",
+                ph.get("gw_name", ""),
+                f"{ph.get('delta_h', 0):.2f}",
+                f"{ph.get('d_horiz', 0):.2f}",
+                "SIM" if ph.get("protected", False) else "NÃO",
+            ])
+        rpt.add_result_table(headers, rows, "Ângulos de blindagem por fase")
+
+    # Grafico V_torre x I_descarga
+    if "I_kA" in results and "V_tower_kV" in results:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.plot(results["I_kA"], results["V_tower_kV"], color="#1565C0", linewidth=2,
+                label="V torre")
+        bil = cfg.get("BIL_kV", 0)
+        if bil > 0:
+            ax.axhline(bil, color="#E53935", linestyle="--", linewidth=1.5, label=f"BIL = {bil:.0f} kV")
+        ax.set_xlabel("Corrente de descarga (kA)")
+        ax.set_ylabel("Tensão na torre (kV)")
+        ax.set_title("Tensão na Torre vs Corrente de Descarga")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        rpt.add_figure_from_matplotlib(fig, "Curva V torre × I descarga com limite BIL")
+
+    rpt.add_heading1("Conclusão")
+    if all_prot:
+        rpt.add_body(
+            f"Todas as fases estão adequadamente protegidas pelos cabos-guarda. O pior ângulo "
+            f"de blindagem é de {worst:.1f}°, dentro do limite aceitável. "
+        )
+    else:
+        rpt.add_body(
+            f"Existem fases com ângulo de blindagem acima do limite aceitável (pior caso: {worst:.1f}°). "
+            f"Recomenda-se reposicionar os cabos-guarda ou adicionar um segundo cabo-guarda para "
+            f"garantir proteção adequada."
+        )
+    rpt.add_body(SOFTWARE_NOTE)
+    rpt.add_references_section(REFS_SHIELDING)
+
+
+# ====================================================================
+# 7. ISOLAMENTO Vmax
+# ====================================================================
+
+def report_vmax_insulation(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
+    rpt.add_cover("Estudo de Isolamento – Sobretensões Temporárias", "Linha de Transmissão")
+    rpt.add_page_break()
+    rpt.add_heading1("Sumário")
+    rpt.add_toc()
+    rpt.add_page_break()
+
+    rpt.add_heading1("Introdução")
+    rpt.add_body(
+        "A verificação do isolamento frente a sobretensões temporárias (TOV) é parte essencial "
+        "da coordenação de isolamento conforme IEC 60071-1/2 e ABNT NBR 6939. As sobretensões "
+        "temporárias podem ser causadas por rejeição de carga, faltas à terra, ferrorressonância "
+        "e outras perturbações do sistema."
+    )
+    rpt.add_body(
+        "A avaliação verifica se a suportabilidade à frequência industrial (power frequency) dos "
+        "equipamentos instalados na linha é adequada considerando o fator de sobretensão k_TOV, "
+        "a correção atmosférica por altitude (Ka) e as distâncias de escoamento (creepage) para "
+        "diferentes níveis de poluição."
+    )
+    rpt.add_body(
+        "Relatório produzido pelo Software BK Estudos Elétricos da BK Engenharia e Tecnologia."
+    )
+
+    rpt.add_heading1("Objetivo")
+    rpt.add_body(
+        "Verificar a adequação do isolamento dos equipamentos da linha de transmissão frente "
+        "a sobretensões temporárias (TOV), incluindo margem de segurança à frequência industrial "
+        "e distância de escoamento para o nível de poluição aplicável."
+    )
+
+    rpt.add_heading1("Metodologia")
+    rpt.add_body("A tensão de sobretensão temporária é dada por:")
+    rpt.add_equation(omml.eq_vmax_tov(), "Tensão de sobretensão temporária")
+    rpt.add_body("O fator de correção atmosférica por altitude é:")
+    rpt.add_equation(omml.eq_ka_altitude(), "Fator de correção por altitude (IEC 60071-2)")
+    rpt.add_body("A distância de escoamento mínima requerida é:")
+    rpt.add_equation(omml.eq_creepage(), "Distância de escoamento mínima")
+
+    # Resultados
+    rpt.add_heading1("Resultados Obtidos")
+    if "items" in results:
+        headers = ["Equipamento", "V_TOV (kV)", "U_pf corr (kV)", "Margem PF (%)",
+                   "Ka", "Creep. req (mm)", "Creep. forn (mm)", "Status"]
+        rows = []
+        for it in results["items"]:
+            rows.append([
+                it.get("name", ""),
+                f"{it.get('V_TOV_kV', 0):.1f}",
+                f"{it.get('U_pf_corr_kV', 0):.1f}",
+                f"{it.get('margin_pf_percent', 0):.1f}",
+                f"{it.get('Ka', 1):.4f}",
+                f"{it.get('creepage_req_mm', 0):.0f}",
+                f"{it.get('creepage_forn_mm', 0):.0f}",
+                "ATENDE" if it.get("meets_pf", True) and it.get("meets_creepage", True) else "NÃO ATENDE",
+            ])
+        rpt.add_result_table(headers, rows, "Verificação de isolamento por equipamento")
+
+        # Grafico de margem
+        if results["items"]:
+            fig, ax = plt.subplots(figsize=(10, 5))
+            names = [it.get("name", f"Eq {i}") for i, it in enumerate(results["items"])]
+            margins = [it.get("margin_pf_percent", 0) for it in results["items"]]
+            min_margin = cfg.get("min_margin", 15)
+            colors = ["#43A047" if m >= min_margin else "#E53935" for m in margins]
+            ax.barh(names, margins, color=colors)
+            ax.axvline(min_margin, color="#E53935", linestyle="--", label=f"Mín {min_margin}%")
+            ax.set_xlabel("Margem PF (%)")
+            ax.set_title("Margem de Isolamento à Frequência Industrial")
+            ax.legend()
+            ax.grid(True, alpha=0.3, axis="x")
+            rpt.add_figure_from_matplotlib(fig, "Margem de isolamento por equipamento")
+
+    rpt.add_heading1("Conclusão")
+    all_ok = all(
+        it.get("meets_pf", True) and it.get("meets_creepage", True)
+        for it in results.get("items", [{}])
+    )
+    if all_ok:
+        rpt.add_body(
+            "Todos os equipamentos avaliados atendem aos critérios de isolamento à frequência "
+            "industrial e distância de escoamento para as condições de altitude e poluição consideradas."
+        )
+    else:
+        rpt.add_body(
+            "Existem equipamentos que não atendem aos critérios de isolamento. Recomenda-se "
+            "substituir os isoladores por modelos com maior suportabilidade ou distância de "
+            "escoamento, ou instalar para-raios adequados para limitar as sobretensões."
+        )
+    rpt.add_body(SOFTWARE_NOTE)
+    rpt.add_references_section(REFS_VMAX)
+
+
+# ====================================================================
+# 8. COORDENACAO DE ISOLAMENTO
+# ====================================================================
+
+def report_coord_isolamento(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
+    rpt.add_cover("Estudo de Coordenação de Isolamento", "Linha de Transmissão")
+    rpt.add_page_break()
+    rpt.add_heading1("Sumário")
+    rpt.add_toc()
+    rpt.add_page_break()
+
+    rpt.add_heading1("Introdução")
+    rpt.add_body(
+        "A coordenação de isolamento é o processo de seleção dos níveis de isolamento dos "
+        "equipamentos elétricos em relação às tensões que podem ocorrer no sistema, levando "
+        "em conta os dispositivos de proteção contra sobretensões (para-raios). É regida pela "
+        "norma IEC 60071-1/2 e ABNT NBR 6939."
+    )
+    rpt.add_body(
+        "O estudo envolve a determinação dos níveis de impulso atmosférico (BIL/NBI), "
+        "verificação da cadeia de isoladores, especificação de para-raios e análise das "
+        "formas de onda padronizadas (1.2/50 µs para impulso atmosférico)."
+    )
+    rpt.add_body(
+        "Relatório produzido pelo Software BK Estudos Elétricos da BK Engenharia e Tecnologia."
+    )
+
+    rpt.add_heading1("Objetivo")
+    rpt.add_body(
+        "Determinar e verificar os níveis de coordenação de isolamento da linha de transmissão, "
+        "incluindo o número de isoladores necessários na cadeia, verificação do NBI (BIL) e "
+        "especificação de para-raios de óxido metálico."
+    )
+
+    rpt.add_heading1("Metodologia")
+    rpt.add_body("A verificação do NBI da cadeia de isoladores segue o critério:")
+    rpt.add_equation(omml.eq_coord_nbi(), "Critério de atendimento ao NBI")
+    rpt.add_body(
+        "A onda de impulso atmosférico normalizada 1.2/50 µs é utilizada para verificar "
+        "a suportabilidade dos equipamentos. O para-raios é especificado pela tensão residual "
+        "e energia dissipada durante os surtos."
+    )
+
+    rpt.add_heading1("Resultados Obtidos")
+    V_imp_max = results.get("V_impulse_max_kV", 0)
+    theta = results.get("theta_deg", 0)
+    n_disc_n = results.get("N_disc_normal", 0)
+    n_disc_p = results.get("N_disc_polluted", 0)
+    atende = results.get("atende_NBI", False)
+
+    rpt.add_kpi_table([
+        ("V impulso máx", f"{V_imp_max:.1f}", "kV"),
+        ("Ângulo proteção", f"{theta:.1f}", "°"),
+        ("N° discos (normal)", f"{n_disc_n}", "unid."),
+        ("N° discos (poluído)", f"{n_disc_p}", "unid."),
+        ("Atende NBI", "SIM" if atende else "NÃO", ""),
+    ])
+
+    # Onda de impulso
+    if "impulse_t" in results and "impulse_V" in results:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.plot(np.array(results["impulse_t"]) * 1e6, results["impulse_V"],
+                color="#1565C0", linewidth=2, label="Onda 1.2/50 µs")
+        ax.set_xlabel("Tempo (µs)")
+        ax.set_ylabel("Tensão (kV)")
+        ax.set_title("Forma de Onda de Impulso Atmosférico Normalizado")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        rpt.add_figure_from_matplotlib(fig, "Onda de impulso atmosférico 1.2/50 µs")
+
+    # Curva V-I do para-raios
+    if "arrester_I" in results and "arrester_V" in results:
+        fig2, ax2 = plt.subplots(figsize=(8, 5))
+        ax2.plot(results["arrester_I"], results["arrester_V"],
+                 color="#FB8C00", linewidth=2, label="V(I) para-raios")
+        if "arrester_I_ref" in results:
+            ax2.plot(results["arrester_I_ref"], results["arrester_V_ref"],
+                     "ro", markersize=10, label="Ponto de referência")
+        ax2.set_xlabel("Corrente (kA)")
+        ax2.set_ylabel("Tensão residual (kV)")
+        ax2.set_title("Característica V-I do Para-raios")
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        rpt.add_figure_from_matplotlib(fig2, "Curva V-I do para-raios de óxido metálico")
+
+    # Tabela de isoladores
+    if "insulator_table" in results:
+        rpt.add_heading2("Cadeia de Isoladores")
+        ins_table = results["insulator_table"]
+        if isinstance(ins_table, list) and len(ins_table) > 0:
+            headers = ["Tipo", "N° Normal", "N° Poluição", "NBI req (kV)", "NBI forn (kV)", "Atende"]
+            rows = []
+            for ins in ins_table:
+                rows.append([
+                    str(ins.get("tipo", "-")),
+                    str(ins.get("N_normal", 0)),
+                    str(ins.get("N_poluicao", ins.get("N_polluted", 0))),
+                    f"{ins.get('NBI_req_kV', 0):.0f}",
+                    f"{ins.get('NBI_forn_kV', 0):.0f}",
+                    "SIM" if ins.get("atende", ins.get("atende_NBI", False)) else "NÃO",
+                ])
+            rpt.add_result_table(headers, rows, "Especificação da cadeia de isoladores")
+        elif isinstance(ins_table, dict):
+            ins = ins_table
+            headers = ["Parâmetro", "Normal", "Poluído"]
+            rows = [
+                ["N° de discos", str(ins.get("N_normal", 0)), str(ins.get("N_polluted", 0))],
+                ["V impulso cadeia (kV)", f"{ins.get('V_imp_cadeia', 0):.1f}", "-"],
+                ["Atende NBI", "SIM" if ins.get("atende_NBI", False) else "NÃO", "-"],
+            ]
+            rpt.add_result_table(headers, rows, "Especificação da cadeia de isoladores")
+
+    rpt.add_heading1("Conclusão")
+    if atende:
+        rpt.add_body(
+            f"A coordenação de isolamento atende ao NBI especificado. A cadeia requer "
+            f"{n_disc_n} discos em condição normal e {n_disc_p} discos em condição de poluição. "
+            f"O para-raios de óxido metálico especificado garante proteção adequada contra "
+            f"sobretensões atmosféricas."
+        )
+    else:
+        rpt.add_body(
+            f"A coordenação de isolamento NÃO atende ao NBI especificado. Recomenda-se "
+            f"aumentar o número de isoladores na cadeia (mínimo {n_disc_p} discos para "
+            f"condição de poluição) ou revisar a especificação do para-raios."
+        )
+    rpt.add_body(SOFTWARE_NOTE)
+    rpt.add_references_section(REFS_COORD)
+
+
+# ====================================================================
+# 9. RELIGAMENTO TRIPOLAR
+# ====================================================================
+
+def report_religamento(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
+    rpt.add_cover("Estudo de Religamento Tripolar", "Linha de Transmissão")
+    rpt.add_page_break()
+    rpt.add_heading1("Sumário")
+    rpt.add_toc()
+    rpt.add_page_break()
+
+    rpt.add_heading1("Introdução")
+    rpt.add_body(
+        "O religamento automático tripolar é uma prática comum em linhas de transmissão para "
+        "restaurar a continuidade do serviço após faltas transitórias (tipicamente descargas "
+        "atmosféricas). O tempo morto deve ser dimensionado para permitir a extinção do arco "
+        "e a redução das sobretensões transitórias a níveis aceitáveis."
+    )
+    rpt.add_body(
+        "A análise avalia a sobretensão transitória durante o religamento, considerando a "
+        "carga aprisionada na linha, frequência natural de oscilação e amortecimento, conforme "
+        "metodologias do IEEE e CIGRÉ."
+    )
+    rpt.add_body(
+        "Relatório produzido pelo Software BK Estudos Elétricos da BK Engenharia e Tecnologia."
+    )
+
+    rpt.add_heading1("Objetivo")
+    rpt.add_body(
+        "Determinar as janelas de tempo aceitáveis para o religamento tripolar automático, "
+        "garantindo que as sobretensões transitórias não excedam os limites de isolamento."
+    )
+
+    rpt.add_heading1("Metodologia")
+    rpt.add_body("O fator de sobretensão durante o religamento é modelado por:")
+    rpt.add_equation(omml.eq_reclosing_fo(), "Fator de sobretensão transitória")
+    rpt.add_body(
+        "Onde V_trap é a tensão aprisionada (pu), α é o coeficiente de amortecimento "
+        "e f₀ é a frequência natural de oscilação da linha."
+    )
+
+    rpt.add_heading1("Resultados Obtidos")
+    if "circuits" in results:
+        for i, circ in enumerate(results["circuits"]):
+            rpt.add_heading2(f"Circuito {i+1}")
+            rpt.add_kpi_table([
+                ("f₀ natural", f"{circ.get('f0_hz', 0):.2f}", "Hz"),
+                ("FO tempo morto", f"{circ.get('FO_dead_pu', 0):.3f}", "pu"),
+                ("FO máximo", f"{circ.get('FO_max_pu', 0):.3f}", "pu"),
+                ("Tempo morto OK", "SIM" if circ.get("dead_time_ok", False) else "NÃO", ""),
+                ("N° janelas", str(circ.get("n_windows", 0)), ""),
+            ])
+
+            if "t_s" in circ and "FO_pu" in circ:
+                fig, ax = plt.subplots(figsize=(10, 5))
+                t = np.array(circ["t_s"]) * 1000  # ms
+                ax.plot(t, circ["FO_pu"], color="#1565C0", linewidth=1.5, label="FO(t)")
+                limit = cfg.get("overvoltage_limit_pu", 2.0)
+                ax.axhline(limit, color="#E53935", linestyle="--", label=f"Limite {limit:.1f} pu")
+                ax.axhline(-limit, color="#E53935", linestyle="--")
+                dead = cfg.get("dead_time_s", 0.5) * 1000
+                ax.axvline(dead, color="#FB8C00", linestyle=":", linewidth=2, label=f"Tempo morto {dead:.0f} ms")
+                ax.set_xlabel("Tempo (ms)")
+                ax.set_ylabel("FO (pu)")
+                ax.set_title(f"Sobretensão de Religamento – Circuito {i+1}")
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                rpt.add_figure_from_matplotlib(fig, f"Evolução temporal do fator de sobretensão – Circuito {i+1}")
+
+            if "windows" in circ:
+                headers = ["Janela", "t início (ms)", "t fim (ms)", "Duração (ms)"]
+                rows = []
+                for j, w in enumerate(circ["windows"]):
+                    rows.append([
+                        str(j + 1),
+                        f"{w.get('t_start', 0) * 1000:.1f}",
+                        f"{w.get('t_end', 0) * 1000:.1f}",
+                        f"{(w.get('t_end', 0) - w.get('t_start', 0)) * 1000:.1f}",
+                    ])
+                rpt.add_result_table(headers, rows, f"Janelas de religamento aceitáveis – Circuito {i+1}")
+
+    rpt.add_heading1("Conclusão")
+    rpt.add_body(
+        "As janelas de religamento foram determinadas para garantir que as sobretensões "
+        "transitórias não excedam os limites de isolamento. O tempo morto deve ser ajustado "
+        "dentro de uma das janelas aceitáveis identificadas."
+    )
+    rpt.add_body(SOFTWARE_NOTE)
+    rpt.add_references_section(REFS_RECLOSING)
+
+
+# ====================================================================
+# 10. COMPATIBILIDADE ELETROMAGNETICA
+# ====================================================================
+
+def report_emi(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
+    rpt.add_cover("Estudo de Compatibilidade Eletromagnética", "Linha de Transmissão")
+    rpt.add_page_break()
+    rpt.add_heading1("Sumário")
+    rpt.add_toc()
+    rpt.add_page_break()
+
+    rpt.add_heading1("Introdução")
+    rpt.add_body(
+        "O estudo de compatibilidade eletromagnética (EMC/EMI) avalia o acoplamento indutivo "
+        "entre a linha de transmissão e infraestruturas paralelas, como dutos metálicos "
+        "(gasodutos, oleodutos) e linhas de comunicação. A indução de tensões pode representar "
+        "riscos à segurança pessoal e à integridade dos equipamentos."
+    )
+    rpt.add_body(
+        "A metodologia segue recomendações da ITU-T K.68, IEEE 776 e CIGRÉ, utilizando modelos "
+        "de impedância mútua para estimativa das tensões induzidas em regime permanente e "
+        "durante faltas."
+    )
+    rpt.add_body(
+        "Relatório produzido pelo Software BK Estudos Elétricos da BK Engenharia e Tecnologia."
+    )
+
+    rpt.add_heading1("Objetivo")
+    rpt.add_body(
+        "Estimar as tensões induzidas por acoplamento eletromagnético em dutos e linhas de "
+        "comunicação paralelos à linha de transmissão, verificando o atendimento aos limites "
+        "de segurança."
+    )
+
+    rpt.add_heading1("Metodologia")
+    rpt.add_body("A tensão induzida por acoplamento magnético é proporcional à impedância mútua:")
+    rpt.add_equation(omml.eq_emi_induced(), "Tensão induzida por acoplamento")
+    rpt.add_body(
+        "Onde ω é a frequência angular, M é a impedância mútua efetiva (H/m), I é a corrente "
+        "de fase (A) e L é o comprimento de paralelismo (km)."
+    )
+
+    rpt.add_heading1("Resultados Obtidos")
+    pipe = results.get("pipeline", {})
+    comm = results.get("comm", {})
+
+    if pipe:
+        rpt.add_heading2("Duto / Pipeline")
+        rpt.add_kpi_table([
+            ("V cont", f"{pipe.get('V_cont', 0):.2f}", "V/km"),
+            ("Limite cont", f"{pipe.get('lim_cont', 60):.0f}", "V/km"),
+            ("V curto", f"{pipe.get('V_short', 0):.2f}", "V/km"),
+            ("Limite curto", f"{pipe.get('lim_short', 300):.0f}", "V/km"),
+            ("Atende", "SIM" if not pipe.get("exceeds_cont", False) else "NÃO", ""),
+        ])
+
+    if comm:
+        rpt.add_heading2("Comunicação")
+        rpt.add_kpi_table([
+            ("E longitudinal", f"{comm.get('E_long', 0):.4f}", "V/m"),
+            ("Limite", f"{comm.get('lim_E', 5):.3f}", "V/m"),
+            ("Atende", "SIM" if not comm.get("exceeds_E", False) else "NÃO", ""),
+        ])
+
+    rpt.add_heading1("Conclusão")
+    rpt.add_body(
+        "Os resultados de triagem de compatibilidade eletromagnética foram apresentados. "
+        "Caso os limites sejam excedidos, recomenda-se: aumento da separação, blindagem "
+        "do duto, instalação de dispositivos de proteção catódica ou estudo detalhado "
+        "com modelagem específica."
+    )
+    rpt.add_body(SOFTWARE_NOTE)
+    rpt.add_references_section(REFS_EMI)
+
+
+# ====================================================================
+# 11. FLUXO DE POTENCIA
+# ====================================================================
+
+def report_fluxo_potencia(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
+    rpt.add_cover("Estudo de Fluxo de Potência", "Rede de Transmissão")
+    rpt.add_page_break()
+    rpt.add_heading1("Sumário")
+    rpt.add_toc()
+    rpt.add_page_break()
+
+    rpt.add_heading1("Introdução")
+    rpt.add_body(
+        "O estudo de fluxo de potência (load flow) é a ferramenta fundamental para a análise "
+        "de sistemas elétricos de potência em regime permanente. Permite determinar as tensões "
+        "em todas as barras, os fluxos de potência ativa e reativa nos ramos, e as perdas "
+        "totais do sistema."
+    )
+    rpt.add_body(
+        "O método de Newton-Raphson completo é utilizado para resolver o sistema de equações "
+        "não-lineares da rede, conforme descrito na literatura clássica de Monticelli, "
+        "Stevenson e Glover. O método apresenta convergência quadrática e é o mais utilizado "
+        "na indústria."
+    )
+    rpt.add_body(
+        "Relatório produzido pelo Software BK Estudos Elétricos da BK Engenharia e Tecnologia."
+    )
+
+    rpt.add_heading1("Objetivo")
+    rpt.add_body(
+        "Determinar o perfil de tensão, fluxos de potência e perdas na rede de transmissão "
+        "em estudo, verificando o atendimento aos critérios operativos de tensão (0.95–1.05 pu)."
+    )
+
+    rpt.add_heading1("Metodologia")
+    rpt.add_body("O método de Newton-Raphson resolve o sistema iterativamente:")
+    rpt.add_equation(omml.eq_power_flow_newton(), "Iteração de Newton-Raphson")
+    rpt.add_body(
+        "Onde J é a matriz Jacobiana, ΔP e ΔQ são os mismatches de potência ativa e "
+        "reativa, e Δθ e ΔV são as correções de ângulo e magnitude da tensão."
+    )
+
+    rpt.add_heading1("Resultados Obtidos")
+    conv = results.get("converged", False)
+    iters = results.get("iters", 0)
+    mismatch = results.get("max_mismatch", 0)
+    slack_p = results.get("slack_p_mw", 0)
+    slack_q = results.get("slack_q_mvar", 0)
+
+    rpt.add_kpi_table([
+        ("Convergiu", "SIM" if conv else "NÃO", ""),
+        ("Iterações", str(iters), ""),
+        ("Mismatch", f"{mismatch:.2e}", "pu"),
+        ("Slack P", f"{slack_p:.3f}", "MW"),
+        ("Slack Q", f"{slack_q:.3f}", "Mvar"),
+    ])
+
+    # Tabela barras
+    if "buses" in results:
+        headers = ["Barra", "Tipo", "|V| (kV)", "Ângulo (°)", "P (MW)", "Q (Mvar)"]
+        rows = []
+        for b in results["buses"]:
+            rows.append([
+                str(b.get("bus", "")),
+                b.get("type", ""),
+                f"{b.get('V_kV', 0):.3f}",
+                f"{b.get('angle_deg', 0):.3f}",
+                f"{b.get('P_MW', 0):.3f}",
+                f"{b.get('Q_Mvar', 0):.3f}",
+            ])
+        rpt.add_result_table(headers, rows, "Resultados por barra")
+
+    # Tabela fluxos
+    if "branches" in results:
+        headers = ["De", "Para", "P (MW)", "Q (Mvar)", "Perda P (MW)", "Perda Q (Mvar)"]
+        rows = []
+        for br in results["branches"]:
+            rows.append([
+                str(br.get("frm", "")),
+                str(br.get("to", "")),
+                f"{br.get('p_mw', 0):.3f}",
+                f"{br.get('q_mvar', 0):.3f}",
+                f"{br.get('p_loss', 0):.6f}",
+                f"{br.get('q_loss', 0):.6f}",
+            ])
+        rpt.add_result_table(headers, rows, "Fluxos por ramo")
+
+    # Grafico perfil de tensao
+    if "buses" in results:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        bus_ids = [b.get("bus", i) for i, b in enumerate(results["buses"])]
+        v_pu = [b.get("V_pu", 1.0) for b in results["buses"]]
+        ax.bar([str(b) for b in bus_ids], v_pu, color="#1565C0", alpha=0.85)
+        ax.axhline(1.05, color="#E53935", linestyle="--", label="1.05 pu")
+        ax.axhline(0.95, color="#E53935", linestyle="--", label="0.95 pu")
+        ax.axhline(1.0, color="#333333", linestyle="-", alpha=0.3)
+        ax.set_xlabel("Barra")
+        ax.set_ylabel("|V| (pu)")
+        ax.set_title("Perfil de Tensão nas Barras")
+        ax.set_ylim(0.9, 1.1)
+        ax.legend()
+        ax.grid(True, alpha=0.3, axis="y")
+        rpt.add_figure_from_matplotlib(fig, "Perfil de tensão nas barras do sistema")
+
+    rpt.add_heading1("Conclusão")
+    if conv:
+        rpt.add_body(
+            f"O fluxo de potência convergiu em {iters} iterações com mismatch máximo de "
+            f"{mismatch:.2e} pu. O perfil de tensão e os fluxos de potência foram determinados "
+            f"com sucesso."
+        )
+        if "buses" in results:
+            v_min = min(b.get("V_pu", 1) for b in results["buses"])
+            v_max = max(b.get("V_pu", 1) for b in results["buses"])
+            if 0.95 <= v_min and v_max <= 1.05:
+                rpt.add_body(
+                    f"Todas as tensões estão dentro da faixa operativa (0.95–1.05 pu). "
+                    f"V mín = {v_min:.4f} pu, V máx = {v_max:.4f} pu."
+                )
+            else:
+                rpt.add_body(
+                    f"Existem barras com tensão fora da faixa operativa: "
+                    f"V mín = {v_min:.4f} pu, V máx = {v_max:.4f} pu. "
+                    f"Recomenda-se avaliar compensação reativa ou ajuste de taps."
+                )
+    else:
+        rpt.add_body(
+            "O fluxo de potência NÃO convergiu no número máximo de iterações. "
+            "Verifique os dados de entrada (impedâncias, potências, configuração de barras)."
+        )
+    rpt.add_body(SOFTWARE_NOTE)
+    rpt.add_references_section(REFS_PF)
