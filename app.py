@@ -362,11 +362,19 @@ def _report_buttons(module_key: str, results, cfg: dict):
 
 # === SIDEBAR ===
 PAGES = [
-    "🏠 Home", "📐 Parametros Eletricos", "📊 Banco de Cabos",
-    "⛈️ Corona", "🔋 Campos EM", "🌡️ Ampacidade & Flecha",
-    "📻 RI e RA", "🛡️ Blindagem", "⚡ Isolamento Vmax",
-    "🔌 Coord. Isolamento", "🔄 Religamento Tripolar",
-    "📡 Compat. Eletromagnetica", "🔀 Fluxo de Potencia",
+    "🏠 Home",
+    "📐 Parametros Eletricos",
+    "⛈️ Corona",
+    "🔋 Campos EM",
+    "🌡️ Ampacidade & Flecha",
+    "📻 RI e RA",
+    "🛡️ Blindagem",
+    "⚡ Isolamento Vmax",
+    "🔌 Coord. Isolamento",
+    "🔄 Religamento Tripolar",
+    "📡 Compat. Eletromagnetica",
+    "🔀 Fluxo de Potencia",
+    "📊 Banco de Cabos",
 ]
 
 # ── Navegação via session_state (evita loop React do st.radio) ──────
@@ -380,7 +388,7 @@ with st.sidebar:
     st.markdown(
         "<div style='padding:18px 16px 4px 16px;'>"
         "<div style='font-size:1.15rem;font-weight:700;color:#E0E0E0;'>⚡ BK Estudos Elétricos</div>"
-        "<div style='font-size:0.76rem;color:#90CAF9;margin-top:2px;'>Linhas de Transmissão v3.0</div>"
+        "<div style='font-size:0.76rem;color:#90CAF9;margin-top:2px;'>Linhas de Transmissão e Subestações v3.0</div>"
         "</div>",
         unsafe_allow_html=True,
     )
