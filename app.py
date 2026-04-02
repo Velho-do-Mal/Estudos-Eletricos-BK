@@ -130,7 +130,24 @@ if abs(_cur_v - _prev_v) > 0.01:
                 "reclosing_result", "emi_result", "ri_ra_result", "pf_result",
                 "computed_vr"]:
         if _ck in st.session_state:
+
+# Invalidação de cache por mudança de cabo/geometria
+_cur_cable = st.session_state.get("cable_phase_key", "")
+_prev_cable = st.session_state.get("prev_cable_phase_key", _cur_cable)
+_cur_geom   = st.session_state.get("geometry_type", "")
+_prev_geom  = st.session_state.get("prev_geometry_type", _cur_geom)
+_cur_bundle = st.session_state.get("bundle_n", 1)
+_prev_bundle= st.session_state.get("prev_bundle_n", _cur_bundle)
+if _cur_cable != _prev_cable or _cur_geom != _prev_geom or _cur_bundle != _prev_bundle:
+    st.session_state.results = None
+    for _ck in ["corona_result","fields_result","ampacity_result",
+                "shielding_result","vmax_result","coord_isol_result",
+                "reclosing_result","emi_result","ri_ra_result","pf_result","computed_vr"]:
+        if _ck in st.session_state:
             del st.session_state[_ck]
+st.session_state["prev_cable_phase_key"] = _cur_cable
+st.session_state["prev_geometry_type"]   = _cur_geom
+st.session_state["prev_bundle_n"]        = _cur_bundle
 
 # === HELPERS ===
 def _proj_info():
@@ -442,7 +459,8 @@ with st.sidebar:
     )
 
     for _pg in PAGES:
-        if st.button(_pg, key=f"_nav_{_pg}", use_container_width=True):
+        _btn_type = "primary" if _pg == st.session_state["active_page"] else "secondary"
+        if st.button(_pg, key=f"_nav_{_pg}", use_container_width=True, type=_btn_type):
             st.session_state["active_page"] = _pg
             st.rerun()
 
@@ -548,13 +566,12 @@ if page == PAGES[0]:
                         st.session_state["neon_project_id"] = _sel_id
                         # Restaurar meta
                         _meta = _pd.get("meta") or {}
-                        if _meta:
-                            for _mk in ["pf_load","altitude_m","circuits_layout","bundle_n","bundle_ds",
-                                         "phase_vert_spacing","dx_B","dx_C","circuit_spacing","h_phase_ref",
-                                         "h_min_phase","h_shield","cable_phase_key","cable_shield_key",
-                                         "n_shield_wires","shield_dx_m","line_length_km","temp_C","Vs_ang"]:
-                                if _mk in _meta:
-                                    st.session_state[_mk] = _meta[_mk]
+                        for _mk in ["pf_load","altitude_m","circuits_layout","bundle_n","bundle_ds",
+                                     "phase_vert_spacing","dx_B","dx_C","circuit_spacing","h_phase_ref",
+                                     "h_min_phase","h_shield","cable_phase_key","cable_shield_key",
+                                     "n_shield_wires","shield_dx_m","line_length_km","temp_C","Vs_ang"]:
+                            if _mk in _meta:
+                                st.session_state[_mk] = _meta[_mk]
                         # Invalida resultados
                         st.session_state.results = None
                         st.session_state["prev_voltage_kv"] = st.session_state.voltage_kv
@@ -566,10 +583,27 @@ if page == PAGES[0]:
         _npid = st.session_state.get("neon_project_id")
         if _npid:
             st.caption(f"📌 ID Neon: {_npid}")
-            # Listar estudos salvos
             _studies = list_studies_neon(_npid)
             if _studies:
                 st.caption(f"📊 {len(_studies)} estudo(s) salvo(s)")
+            # Excluir projeto
+            if st.session_state.get("_confirm_delete"):
+                st.warning("Confirmar exclusao?")
+                _cy, _cn = st.columns(2)
+                with _cy:
+                    if st.button("✅ Sim", key="_del_yes", use_container_width=True):
+                        delete_project_neon(_npid)
+                        st.session_state["neon_project_id"] = None
+                        st.session_state["_confirm_delete"] = False
+                        st.rerun()
+                with _cn:
+                    if st.button("❌ Nao", key="_del_no", use_container_width=True):
+                        st.session_state["_confirm_delete"] = False
+                        st.rerun()
+            else:
+                if st.button("🗑️ Excluir", key="_del_proj", use_container_width=True):
+                    st.session_state["_confirm_delete"] = True
+                    st.rerun()
 
     bk_section("Identificacao do Projeto")
     p1, p2, p3 = st.columns(3)
