@@ -575,6 +575,7 @@ def _report_buttons(module_key: str, results, cfg: dict):
 PAGES = [
     "🏠 Home",
     "📐 Parametros Eletricos",
+    "📊 Banco de Cabos",
     "⛈️ Corona",
     "🔋 Campos EM",
     "🌡️ Ampacidade & Flecha",
@@ -585,7 +586,7 @@ PAGES = [
     "🔄 Religamento Tripolar",
     "📡 Compat. Eletromagnetica",
     "🔀 Fluxo de Potencia",
-    "📊 Banco de Cabos",
+    
 ]
  
 # ── Navegação via session_state (evita loop React do st.radio) ──────
