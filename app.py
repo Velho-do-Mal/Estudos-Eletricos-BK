@@ -8,17 +8,17 @@ import sys, math, json, traceback
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Any
-
+ 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-
+ 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
+ 
 from core.cables import Cable, default_cable_db, find_cable, calc_line_params_from_cable, EPS0, MU0
 from core.geometry_model import ConductorInstance, LineGeometry, build_geometry_from_home
 from core.line_params import (compute_all_circuits_params, ProjectInfo, VoltageSpec, LineParamsResult,
@@ -31,7 +31,7 @@ from core.vmax_insulation import VmaxConfig, InsulationItem, InsulationItemResul
 from core.reclosing_tripolar import ReclosingConfig, ReclosingStudyResult, compute_reclosing_study
 from core.emi_compat import EMIConfig, EMIStudyResult, run_emi_study
 from core.coord_isol import CoordIsolConfig, CoordIsolResult, compute_coord_isolation
-
+ 
 try:
     from core.field_em import FieldConfig, AneelLimits, FieldProfilesResult, compute_fields_profiles
     HAS_FIELDS = True
@@ -48,16 +48,16 @@ try:
     HAS_PF = True
 except Exception:
     HAS_PF = False
-
+ 
 from theme import (apply_bk_theme, bk_header, bk_section, bk_kpi_row,
     BK_BLUE, BK_BLUE_LIGHT, BK_TEAL, BK_GREEN, BK_ORANGE, BK_RED, BK_PURPLE,
     BK_DARK, BK_GRAY, BK_COLORS, PLOTLY_LAYOUT)
-
+ 
 # DB — persistência local + Neon
 from db import (upsert_project, list_projects, get_project, delete_project,
     init_neon, upsert_project_neon, list_projects_neon, get_project_neon,
     save_study_neon, list_studies_neon, load_study_neon)
-
+ 
 # Report engine (DOCX generation)
 # report_bridge só depende de streamlit (sempre disponível)
 try:
@@ -67,7 +67,7 @@ except Exception:
         def __getattr__(self, name):
             return lambda *a, **kw: ({}, {})
     rb = _DummyRB()
-
+ 
 try:
     from reports import generate_report, REPORT_TITLES
     HAS_DOCX = True
@@ -77,33 +77,219 @@ except Exception as _e:
     REPORT_FILENAMES = {}
     REPORT_TITLES = {}
     def generate_report(*a, **kw): return b""
-
+ 
 st.set_page_config(page_title="BK Estudos Eletricos", page_icon="\u26a1", layout="wide", initial_sidebar_state="expanded")
 apply_bk_theme()
-
+ 
 # === SESSION STATE ===
+# ─────────────────────────────────────────────────────────────────────────────
+# ARQUITETURA DE PERSISTÊNCIA
+#
+# Problema: Streamlit limpa automaticamente do session_state as chaves de
+# widgets (key=) que NÃO foram renderizadas no último ciclo de script. Isso
+# faz com que os parâmetros da Home (tensão, geometria, cabos…) sejam perdidos
+# ao navegar para uma página de estudo, pois os widgets da Home não renderizam.
+#
+# Solução: manter um dict `_proj` em session_state que NÃO é widget key e,
+# portanto, NUNCA é limpo automaticamente pelo Streamlit. Ele é a "fonte da
+# verdade" de todos os estudos. Ao renderizar a Home, sincronizamos widgets →
+# _proj. Em cada _init_state(), restauramos as chaves de widget a partir de
+# _proj antes de aplicar os defaults de fábrica.
+# ─────────────────────────────────────────────────────────────────────────────
+ 
+# Chaves que pertencem ao projeto e precisam persistir entre páginas
+_PROJ_KEYS = [
+    "proj_name", "client", "proj_number",
+    "voltage_kv", "power_mva", "freq_hz", "pf_load", "altitude_m",
+    "n_circuits", "geometry_type", "circuits_layout", "n_lines",
+    "bundle_n", "bundle_ds", "phase_vert_spacing",
+    "dx_B", "dx_C", "circuit_spacing",
+    "h_phase_ref", "h_min_phase", "h_shield",
+    "cable_phase_key", "cable_shield_key",
+    "n_shield_wires", "shield_dx_m",
+    "line_length_km", "temp_C", "Vs_mag", "Vs_ang",
+]
+ 
+# Valores padrão de fábrica (usados só quando não há projeto carregado)
+_PROJ_DEFAULTS: dict = dict(
+    proj_name="", client="", proj_number="",
+    voltage_kv=138.0, power_mva=100.0, freq_hz=60.0,
+    pf_load=1.0, altitude_m=0.0,
+    n_circuits=1, geometry_type="horizontal", circuits_layout="side", n_lines=1,
+    bundle_n=1, bundle_ds=0.4, phase_vert_spacing=4.0,
+    dx_B=8.0, dx_C=16.0, circuit_spacing=20.0,
+    h_phase_ref=15.0, h_min_phase=12.0, h_shield=20.0,
+    cable_phase_key="ACSR_477", cable_shield_key="EHS_3_8in",
+    n_shield_wires=1, shield_dx_m=4.0,
+    line_length_km=100.0, temp_C=50.0,
+    Vs_mag=138.0, Vs_ang=0.0,
+)
+ 
+ 
+def _ensure_proj() -> None:
+    """Garante que _proj existe em session_state com todos os campos."""
+    if "_proj" not in st.session_state:
+        st.session_state["_proj"] = _PROJ_DEFAULTS.copy()
+    else:
+        # Preenche chaves que possam estar faltando (upgrade de versão)
+        for k, v in _PROJ_DEFAULTS.items():
+            st.session_state["_proj"].setdefault(k, v)
+ 
+ 
+def _sync_proj() -> None:
+    """Copia valores dos widgets da Home para _proj.
+    Deve ser chamado ao FINAL de cada render da Home page."""
+    _ensure_proj()
+    for k in _PROJ_KEYS:
+        if k in st.session_state:
+            st.session_state["_proj"][k] = st.session_state[k]
+ 
+ 
+def _restore_from_proj() -> None:
+    """Restaura chaves de widget a partir de _proj.
+    Chamado em _init_state() para reverter limpeza automática do Streamlit."""
+    _ensure_proj()
+    proj = st.session_state["_proj"]
+    for k in _PROJ_KEYS:
+        if k not in st.session_state:
+            st.session_state[k] = proj.get(k, _PROJ_DEFAULTS.get(k))
+ 
+ 
+def _populate_from_project(_pd: dict) -> None:
+    """Popula session_state E _proj a partir de um dict de projeto (Neon/local).
+    Usado pelo auto-load na inicialização e pelo botão 'Carregar'."""
+    _ensure_proj()
+    st.session_state.proj_name     = _pd.get("name", "")
+    st.session_state.client        = _pd.get("client", "")
+    st.session_state.proj_number   = _pd.get("project_number", "")
+    st.session_state.voltage_kv    = float(_pd.get("voltage_kv")   or 138.0)
+    st.session_state.power_mva     = float(_pd.get("power_mva")    or 100.0)
+    st.session_state.freq_hz       = float(_pd.get("frequency_hz") or 60.0)
+    st.session_state.n_circuits    = int(_pd.get("n_circuits")     or 1)
+    st.session_state.geometry_type = _pd.get("geometry_type")      or "horizontal"
+    st.session_state.n_lines       = int(_pd.get("n_lines")        or 1)
+    st.session_state.Vs_mag        = float(_pd.get("voltage_kv")   or 138.0)
+    _meta = _pd.get("meta") or {}
+    # Validação contra valores corrompidos (mínimos de widget gravados por versões antigas)
+    _meta_validators = {
+        "line_length_km": lambda v: float(v) if v is not None and float(v) >= 1.0 else 100.0,
+        "temp_C":         lambda v: float(v) if v is not None and float(v) >= 0.0 else 50.0,
+        "bundle_n":       lambda v: int(v)   if v is not None and int(v) >= 1 else 1,
+        "n_shield_wires": lambda v: int(v)   if v is not None and int(v) >= 0 else 1,
+        "h_phase_ref":    lambda v: float(v) if v is not None and float(v) >= 0.5 else 15.0,
+        "h_min_phase":    lambda v: float(v) if v is not None and float(v) >= 0.5 else 12.0,
+        "h_shield":       lambda v: float(v) if v is not None and float(v) >= 0.5 else 20.0,
+    }
+    for _mk in ["pf_load", "altitude_m", "circuits_layout", "bundle_n", "bundle_ds",
+                "phase_vert_spacing", "dx_B", "dx_C", "circuit_spacing", "h_phase_ref",
+                "h_min_phase", "h_shield", "cable_phase_key", "cable_shield_key",
+                "n_shield_wires", "shield_dx_m", "line_length_km", "temp_C", "Vs_ang"]:
+        if _mk in _meta:
+            _raw = _meta[_mk]
+            _validator = _meta_validators.get(_mk)
+            try:
+                st.session_state[_mk] = _validator(_raw) if _validator else _raw
+            except Exception:
+                st.session_state[_mk] = _PROJ_DEFAULTS.get(_mk, _raw)
+    # Invalida cache de resultados
+    st.session_state.results = None
+    st.session_state["computed_vr"] = None
+    st.session_state["prev_voltage_kv"] = st.session_state.voltage_kv
+    # ← Crítico: sincroniza _proj imediatamente para que estudos usem esses valores
+    _sync_proj()
+ 
+ 
+def _auto_load_latest_project() -> None:
+    """Na primeira execução da sessão, carrega automaticamente o projeto
+    mais recente do Neon DB. Evita que o app abra sempre com os padrões
+    de fábrica após reload do browser."""
+    try:
+        init_neon()
+        projs = list_projects_neon()
+        if projs:
+            pid = projs[0]["id"]   # lista já ordenada por data de atualização
+            _pd = get_project_neon(pid)
+            if _pd:
+                _populate_from_project(_pd)
+                st.session_state["neon_project_id"] = pid
+    except Exception:
+        pass  # falha silenciosa — app continua funcional sem BD
+ 
+ 
+def _build_save_dict() -> dict:
+    """Monta o dict do projeto para salvar. Lê de _proj (fonte da verdade)
+    com fallback para session_state."""
+    _ensure_proj()
+    p = st.session_state["_proj"]
+    return {
+        "name": p.get("proj_name", "") or "Sem nome",
+        "client": p.get("client", ""),
+        "project_number": p.get("proj_number", ""),
+        "voltage_kv": p.get("voltage_kv", 138.0),
+        "power_mva": p.get("power_mva", 100.0),
+        "frequency_hz": p.get("freq_hz", 60.0),
+        "n_circuits": p.get("n_circuits", 1),
+        "n_cables_per_phase": p.get("bundle_n", 1),
+        "geometry_type": p.get("geometry_type", "horizontal"),
+        "n_lines": p.get("n_lines", 1),
+        "meta": {
+            "pf_load": p.get("pf_load", 1.0),
+            "altitude_m": p.get("altitude_m", 0.0),
+            "circuits_layout": p.get("circuits_layout", "side"),
+            "bundle_n": p.get("bundle_n", 1),
+            "bundle_ds": p.get("bundle_ds", 0.4),
+            "phase_vert_spacing": p.get("phase_vert_spacing", 4.0),
+            "dx_B": p.get("dx_B", 8.0),
+            "dx_C": p.get("dx_C", 16.0),
+            "circuit_spacing": p.get("circuit_spacing", 20.0),
+            "h_phase_ref": p.get("h_phase_ref", 15.0),
+            "h_min_phase": p.get("h_min_phase", 12.0),
+            "h_shield": p.get("h_shield", 20.0),
+            "cable_phase_key": p.get("cable_phase_key", "ACSR_477"),
+            "cable_shield_key": p.get("cable_shield_key", "EHS_3_8in"),
+            "n_shield_wires": p.get("n_shield_wires", 1),
+            "shield_dx_m": p.get("shield_dx_m", 4.0),
+            "line_length_km": p.get("line_length_km", 100.0),
+            "temp_C": p.get("temp_C", 50.0),
+            "Vs_ang": p.get("Vs_ang", 0.0),
+        },
+    }
+ 
+ 
+def _auto_save_home() -> None:
+    """Salva automaticamente no Neon ao navegar da Home para outro estudo.
+    Evita perda de alterações não confirmadas com 'Salvar Projeto'."""
+    _npid = st.session_state.get("neon_project_id")
+    if not _npid:
+        return
+    try:
+        upsert_project_neon(_build_save_dict(), _npid)
+    except Exception:
+        pass  # falha silenciosa
+ 
+ 
 def _init_state():
-    defaults = dict(
-        proj_name="", client="", proj_number="",
-        voltage_kv=138.0, power_mva=100.0, freq_hz=60.0,
-        pf_load=1.0, altitude_m=0.0,
-        n_circuits=1, n_cables_phase=1,
-        geometry_type="horizontal", circuits_layout="side", n_lines=1,
-        bundle_n=1, bundle_ds=0.4, phase_vert_spacing=4.0,
-        dx_B=8.0, dx_C=16.0, circuit_spacing=20.0,
-        h_phase_ref=15.0, h_min_phase=12.0, h_shield=20.0,
-        cable_phase_key="ACSR_477", cable_shield_key="EHS_3_8in",
-        n_shield_wires=1, shield_dx_m=4.0,
-        line_length_km=100.0, temp_C=50.0,
-        Vs_mag=138.0, Vs_ang=0.0,
+    # ── 1. Garante _proj (dict persistente — Streamlit NUNCA o limpa) ──────
+    _ensure_proj()
+ 
+    # ── 2. Restaura chaves de widget que o Streamlit possa ter limpado ──────
+    # Isso é o coração do fix: se voltage_kv, n_circuits, etc. foram removidos
+    # pelo Streamlit ao navegar para outra página, aqui os recuperamos de _proj.
+    _restore_from_proj()
+ 
+    # ── 3. Defaults para chaves NÃO relacionadas ao projeto ─────────────────
+    _non_proj_defaults = dict(
+        n_cables_phase=1,
         results=None,
         prev_voltage_kv=138.0,
         neon_project_id=None,
         computed_vr=None,
     )
-    for k, v in defaults.items():
+    for k, v in _non_proj_defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
+ 
+    # ── 4. Banco de cabos ────────────────────────────────────────────────────
     if "cable_db" not in st.session_state:
         cables = default_cable_db()
         st.session_state.cable_db = pd.DataFrame([{
@@ -115,8 +301,15 @@ def _init_state():
             "eps_r": c.eps_r_insulation,
             "Notas": c.notes,
         } for c in cables])
+ 
+    # ── 5. Auto-load do último projeto na PRIMEIRA execução da sessão ────────
+    # Em sessões novas (reload de browser), os dados do projeto são perdidos.
+    # Aqui buscamos o projeto mais recente do Neon DB automaticamente.
+    if not st.session_state.get("_session_init_done"):
+        st.session_state["_session_init_done"] = True
+        _auto_load_latest_project()
 _init_state()
-
+ 
 # ── Detecta mudança de tensão e invalida cache ──────────────
 _cur_v = st.session_state.get("voltage_kv", 138.0)
 _prev_v = st.session_state.get("prev_voltage_kv", 138.0)
@@ -131,7 +324,7 @@ if abs(_cur_v - _prev_v) > 0.01:
                 "computed_vr"]:
         if _ck in st.session_state:
             del st.session_state[_ck]
-
+ 
 # Invalidação de cache por mudança de cabo/geometria
 _cur_cable = st.session_state.get("cable_phase_key", "")
 _prev_cable = st.session_state.get("prev_cable_phase_key", _cur_cable)
@@ -149,12 +342,12 @@ if _cur_cable != _prev_cable or _cur_geom != _prev_geom or _cur_bundle != _prev_
 st.session_state["prev_cable_phase_key"] = _cur_cable
 st.session_state["prev_geometry_type"]   = _cur_geom
 st.session_state["prev_bundle_n"]        = _cur_bundle
-
+ 
 # === HELPERS ===
 def _proj_info():
     s = st.session_state
     return s.get("proj_name",""), s.get("client",""), s.get("proj_number","")
-
+ 
 def _report_btns(module_key, extract_func=None, result_key=None, case_obj=None):
     """Botões de relatório DOCX + salvar estudo no BD para cada módulo."""
     if not HAS_DOCX:
@@ -239,13 +432,13 @@ def _df_to_cables(df):
         except Exception:
             continue
     return cables
-
+ 
 def _cable_keys():
     return st.session_state.cable_db["Codigo"].tolist()
-
+ 
 def _find_cable(key):
     return find_cable(_df_to_cables(st.session_state.cable_db), key)
-
+ 
 def _build_home_dict():
     s = st.session_state
     return dict(
@@ -256,13 +449,13 @@ def _build_home_dict():
         cable_phase_key=s.cable_phase_key, cable_shield_key=s.cable_shield_key,
         shield_present=True, shield_dy_m=s.h_shield - s.h_phase_ref,
         shield_dx_m=s.shield_dx_m, n_shield_wires=s.n_shield_wires)
-
+ 
 def _get_geom():
     return build_geometry_from_home(_build_home_dict())
-
+ 
 def _get_cables():
     return _df_to_cables(st.session_state.cable_db)
-
+ 
 def _compute_params():
     s = st.session_state
     if s.results:
@@ -274,7 +467,7 @@ def _compute_params():
         rd = compute_all_circuits_params(geom=geom, cable_db=_get_cables(), V_LL_kV=s.voltage_kv,
             f_hz=s.freq_hz, temp_C=s.temp_C, Vs_by_circuit=vs_d, Vr_by_circuit=None)
         s.results = [rd[k] for k in sorted(rd.keys())]
-
+ 
     # Calcula Vr para cada circuito via solve_vr_pi (modelo π nominal)
     existing_vr = st.session_state.get("computed_vr")
     if not existing_vr:
@@ -297,7 +490,7 @@ def _compute_params():
         if vr_errors:
             st.session_state["vr_errors"] = vr_errors
     return rd
-
+ 
 def _safe(fn, default=None):
     try:
         return fn()
@@ -306,7 +499,7 @@ def _safe(fn, default=None):
         with st.expander("Traceback"):
             st.code(traceback.format_exc())
         return default
-
+ 
 def _save_study_btn(module_key: str, module_label: str, input_data: dict, result_data: dict):
     """Botão genérico para salvar estudo no Neon."""
     _npid = st.session_state.get("neon_project_id")
@@ -319,7 +512,7 @@ def _save_study_btn(module_key: str, module_label: str, input_data: dict, result
             st.success(f"✅ {module_label} salvo (ID {sid})")
         else:
             st.warning("⚠️ Neon indisponível")
-
+ 
 def _plot_tower(geom):
     fig = go.Figure()
     cc = {1: BK_BLUE, 2: BK_TEAL, 3: BK_ORANGE, 4: BK_RED, 5: BK_GREEN}
@@ -342,7 +535,7 @@ def _plot_tower(geom):
         xaxis_title="Distancia Horizontal (m)", yaxis_title="Altura (m)",
         yaxis=dict(scaleanchor="x", scaleratio=1))
     return fig
-
+ 
 # === REPORT BUTTONS ===
 def _report_buttons(module_key: str, results, cfg: dict):
     """Adiciona botoes de download e preview do relatorio Word."""
@@ -376,8 +569,8 @@ def _report_buttons(module_key: str, results, cfg: dict):
             )
         else:
             st.caption("Clique em 'Gerar Relatório' primeiro")
-
-
+ 
+ 
 # === SIDEBAR ===
 PAGES = [
     "🏠 Home",
@@ -394,13 +587,13 @@ PAGES = [
     "🔀 Fluxo de Potencia",
     "📊 Banco de Cabos",
 ]
-
+ 
 # ── Navegação via session_state (evita loop React do st.radio) ──────
 if "active_page" not in st.session_state:
     st.session_state["active_page"] = PAGES[0]
 if st.session_state["active_page"] not in PAGES:
     st.session_state["active_page"] = PAGES[0]
-
+ 
 with st.sidebar:
     # ── Cabeçalho ──────────────────────────────────────────────────
     st.markdown(
@@ -414,7 +607,7 @@ with st.sidebar:
         "<hr style='border:none;border-top:1px solid #2a3a4a;margin:8px 4px;'/>",
         unsafe_allow_html=True,
     )
-
+ 
     # ── Botões de navegação ────────────────────────────────────────
     # Injeta CSS uma vez para todos os botões nav da sidebar
     _active_idx = PAGES.index(st.session_state["active_page"]) + 1
@@ -458,13 +651,17 @@ with st.sidebar:
         </style>""",
         unsafe_allow_html=True,
     )
-
+ 
     for _pg in PAGES:
         _btn_type = "primary" if _pg == st.session_state["active_page"] else "secondary"
         if st.button(_pg, key=f"_nav_{_pg}", use_container_width=True, type=_btn_type):
+            # Auto-salva parâmetros da Home ao navegar para outro estudo
+            # garante que alterações não salvas explicitamente sejam persistidas
+            if st.session_state.get("active_page") == PAGES[0]:
+                _auto_save_home()
             st.session_state["active_page"] = _pg
             st.rerun()
-
+ 
     # ── Info do projeto ────────────────────────────────────────────
     st.markdown(
         "<hr style='border:none;border-top:1px solid #2a3a4a;margin:8px 4px;'/>",
@@ -479,64 +676,31 @@ with st.sidebar:
         f"📌 {_pn}<br>🏢 {_pc}<br>🔢 {_pd}</div>",
         unsafe_allow_html=True,
     )
-
+ 
 page = st.session_state["active_page"]
-
-
+ 
+ 
 # ===================================================================
 # PAGE: HOME
 # ===================================================================
 if page == PAGES[0]:
     bk_header("Dados do Sistema de Transmissao", "Configure parametros basicos e geometria da torre")
-
+ 
     # ── Gerenciar Projeto (salvar/carregar do Neon) ──────────
     bk_section("Projeto — Banco de Dados Neon")
     _db_c1, _db_c2, _db_c3 = st.columns([2, 2, 1])
     with _db_c1:
         if st.button("💾 Salvar Projeto no BD", type="primary", use_container_width=True):
-            _proj_dict = {
-                "name": st.session_state.proj_name or "Sem nome",
-                "client": st.session_state.client,
-                "project_number": st.session_state.proj_number,
-                "voltage_kv": st.session_state.voltage_kv,
-                "power_mva": st.session_state.power_mva,
-                "frequency_hz": st.session_state.freq_hz,
-                "n_circuits": st.session_state.n_circuits,
-                "n_cables_per_phase": st.session_state.bundle_n,
-                "geometry_type": st.session_state.geometry_type,
-                "n_lines": st.session_state.n_lines,
-                "meta": {
-                    "pf_load": st.session_state.pf_load,
-                    "altitude_m": st.session_state.altitude_m,
-                    "circuits_layout": st.session_state.circuits_layout,
-                    "bundle_n": st.session_state.bundle_n,
-                    "bundle_ds": st.session_state.bundle_ds,
-                    "phase_vert_spacing": st.session_state.phase_vert_spacing,
-                    "dx_B": st.session_state.dx_B,
-                    "dx_C": st.session_state.dx_C,
-                    "circuit_spacing": st.session_state.circuit_spacing,
-                    "h_phase_ref": st.session_state.h_phase_ref,
-                    "h_min_phase": st.session_state.h_min_phase,
-                    "h_shield": st.session_state.h_shield,
-                    "cable_phase_key": st.session_state.cable_phase_key,
-                    "cable_shield_key": st.session_state.cable_shield_key,
-                    "n_shield_wires": st.session_state.n_shield_wires,
-                    "shield_dx_m": st.session_state.shield_dx_m,
-                    "line_length_km": st.session_state.line_length_km,
-                    "temp_C": st.session_state.temp_C,
-                    "Vs_ang": st.session_state.Vs_ang,
-                },
-            }
             try:
                 init_neon()
                 _npid = st.session_state.get("neon_project_id")
-                _new_id = upsert_project_neon(_proj_dict, _npid)
+                _new_id = upsert_project_neon(_build_save_dict(), _npid)
                 if _new_id:
                     st.session_state["neon_project_id"] = _new_id
                     st.success(f"✅ Projeto salvo no Neon (ID {_new_id})")
                 else:
                     # Fallback local
-                    _lid = upsert_project(_proj_dict)
+                    _lid = upsert_project(_build_save_dict())
                     st.warning(f"⚠️ Neon indisponível — salvo localmente (ID {_lid})")
             except Exception as _e:
                 st.error(f"Erro ao salvar: {_e}")
@@ -554,28 +718,8 @@ if page == PAGES[0]:
                 if st.button("📂 Carregar", key="load_proj_btn"):
                     _pd = get_project_neon(_sel_id)
                     if _pd:
-                        st.session_state.proj_name = _pd.get("name", "")
-                        st.session_state.client = _pd.get("client", "")
-                        st.session_state.proj_number = _pd.get("project_number", "")
-                        st.session_state.voltage_kv = float(_pd.get("voltage_kv") or 138.0)
-                        st.session_state.power_mva = float(_pd.get("power_mva") or 100.0)
-                        st.session_state.freq_hz = float(_pd.get("frequency_hz") or 60.0)
-                        st.session_state.n_circuits = int(_pd.get("n_circuits") or 1)
-                        st.session_state.geometry_type = _pd.get("geometry_type") or "horizontal"
-                        st.session_state.n_lines = int(_pd.get("n_lines") or 1)
-                        st.session_state.Vs_mag = st.session_state.voltage_kv
+                        _populate_from_project(_pd)
                         st.session_state["neon_project_id"] = _sel_id
-                        # Restaurar meta
-                        _meta = _pd.get("meta") or {}
-                        for _mk in ["pf_load","altitude_m","circuits_layout","bundle_n","bundle_ds",
-                                     "phase_vert_spacing","dx_B","dx_C","circuit_spacing","h_phase_ref",
-                                     "h_min_phase","h_shield","cable_phase_key","cable_shield_key",
-                                     "n_shield_wires","shield_dx_m","line_length_km","temp_C","Vs_ang"]:
-                            if _mk in _meta:
-                                st.session_state[_mk] = _meta[_mk]
-                        # Invalida resultados
-                        st.session_state.results = None
-                        st.session_state["prev_voltage_kv"] = st.session_state.voltage_kv
                         st.success(f"✅ Projeto '{_pd.get('name')}' carregado — {st.session_state.voltage_kv:.0f} kV")
                         st.rerun()
         else:
@@ -583,29 +727,52 @@ if page == PAGES[0]:
     with _db_c3:
         _npid = st.session_state.get("neon_project_id")
         if _npid:
-            st.caption(f"📌 ID Neon: {_npid}")
-            _studies = list_studies_neon(_npid)
-            if _studies:
-                st.caption(f"📊 {len(_studies)} estudo(s) salvo(s)")
-            # Excluir projeto
-            if st.session_state.get("_confirm_delete"):
-                st.warning("Confirmar exclusao?")
-                _cy, _cn = st.columns(2)
-                with _cy:
-                    if st.button("✅ Sim", key="_del_yes", use_container_width=True):
-                        delete_project_neon(_npid)
+            st.caption(f"📌 ID Neon: **{_npid}**")
+            try:
+                _studies = list_studies_neon(_npid)
+                if _studies:
+                    st.caption(f"📊 {len(_studies)} estudo(s) salvo(s)")
+            except Exception:
+                pass
+        # Botão Excluir sempre visível quando há projetos no BD
+        # (independente de qual projeto está ativo)
+        if st.session_state.get("_confirm_delete"):
+            _del_target = st.session_state.get("_del_target_id", _npid)
+            st.warning(f"⚠️ Excluir projeto ID {_del_target}?")
+            _cy, _cn = st.columns(2)
+            with _cy:
+                if st.button("✅ Sim", key="_del_yes", use_container_width=True):
+                    try:
+                        delete_project_neon(_del_target)
+                    except Exception:
+                        pass
+                    if st.session_state.get("neon_project_id") == _del_target:
                         st.session_state["neon_project_id"] = None
-                        st.session_state["_confirm_delete"] = False
-                        st.rerun()
-                with _cn:
-                    if st.button("❌ Nao", key="_del_no", use_container_width=True):
-                        st.session_state["_confirm_delete"] = False
-                        st.rerun()
-            else:
-                if st.button("🗑️ Excluir", key="_del_proj", use_container_width=True):
-                    st.session_state["_confirm_delete"] = True
+                        # Limpa _proj para não referenciar projeto excluído
+                        st.session_state["_proj"] = _PROJ_DEFAULTS.copy()
+                    st.session_state["_confirm_delete"] = False
+                    st.session_state["_del_target_id"] = None
                     st.rerun()
-
+            with _cn:
+                if st.button("❌ Nao", key="_del_no", use_container_width=True):
+                    st.session_state["_confirm_delete"] = False
+                    st.session_state["_del_target_id"] = None
+                    st.rerun()
+        else:
+            # Mostra botão excluir se há projetos salvos OU projeto ativo
+            _has_projects = bool(_neon_projs) if '_neon_projs' in dir() else bool(_npid)
+            if _has_projects or _npid:
+                # Se há projeto ativo, exclui ele direto; senão, usa seleção
+                _del_id = _npid if _npid else (
+                    _proj_opts.get(_sel) if '_sel' in dir() and _sel != "(nenhum)"
+                    and '_proj_opts' in dir() else None)
+                if _del_id:
+                    if st.button("🗑️ Excluir", key="_del_proj", use_container_width=True,
+                                 help="Excluir projeto ativo do banco de dados"):
+                        st.session_state["_confirm_delete"] = True
+                        st.session_state["_del_target_id"] = _del_id
+                        st.rerun()
+ 
     bk_section("Identificacao do Projeto")
     p1, p2, p3 = st.columns(3)
     with p1: st.text_input("Nome do Projeto", key="proj_name", help="Nome ou titulo do estudo eletrico")
@@ -620,13 +787,13 @@ if page == PAGES[0]:
     c5, c6 = st.columns(2)
     with c5: st.number_input("Altitude (m)", key="altitude_m", min_value=0.0, step=100.0, format="%.0f", help="Afeta corona e isolamento (IEC 60071-2)")
     with c6: st.number_input("No Linhas (<=4)", key="n_lines", min_value=1, max_value=4, step=1, help="Linhas paralelas na faixa de servidao")
-
+ 
     bk_section("Topologia da Linha")
     t1, t2, t3 = st.columns(3)
     with t1: st.number_input("No Circuitos (<=5)", key="n_circuits", min_value=1, max_value=5, step=1, help="Circuitos trifasicos na mesma torre")
     with t2: st.selectbox("Geometria", ["horizontal", "vertical", "triangular"], key="geometry_type", help="Disposicao das fases: H, V ou delta")
     with t3: st.selectbox("Layout Circuitos", ["side", "stacked"], key="circuits_layout", help="side=lado a lado; stacked=empilhado")
-
+ 
     bk_section("Selecao de Cabos")
     ck = _cable_keys()
     cb1, cb2 = st.columns(2)
@@ -636,7 +803,7 @@ if page == PAGES[0]:
     with cb2:
         idx_s = ck.index(st.session_state.cable_shield_key) if st.session_state.cable_shield_key in ck else 0
         st.selectbox("Cabo-Guarda (GW)", ck, index=idx_s, key="cable_shield_key", help="Cabo para-raios/OPGW (NBR 5422 par.6)")
-
+ 
     # ── Configuração de cabos-guarda (1 ou 2) ──────────────────────────
     gw1, gw2 = st.columns(2)
     with gw1:
@@ -649,13 +816,13 @@ if page == PAGES[0]:
         else:
             st.number_input("Deslocamento horizontal GW (m)", key="shield_dx_m", step=0.5, format="%.1f",
                 help="Deslocamento do GW único em relação ao centro das fases (0 = centralizado)")
-
+ 
     bk_section("Feixe de Subcondutores (Bundle)")
     b1, b2, b3 = st.columns(3)
     with b1: st.number_input("Subcondutores (n)", key="bundle_n", min_value=1, max_value=6, step=1, help="1=sem feixe; 2-4 para 230-765kV")
     with b2: st.number_input("Espacamento bundle (m)", key="bundle_ds", min_value=0.1, step=0.05, format="%.2f", help="Tipico: 0.30-0.45 m")
     with b3: st.number_input("Espac. vertical fases (m)", key="phase_vert_spacing", min_value=0.5, step=0.5, format="%.1f", help="Entre fases A-B e B-C (NBR 5422)")
-
+ 
     bk_section("Geometria da Torre")
     g1, g2 = st.columns(2)
     with g1:
@@ -666,7 +833,7 @@ if page == PAGES[0]:
         st.number_input("Altura fase A C1 (m)", key="h_phase_ref", min_value=5.0, step=0.5, format="%.1f", help="NBR 5422 Tab.4: min 7-8m")
         st.number_input("Altura fase mais baixa (m)", key="h_min_phase", min_value=3.0, step=0.5, format="%.1f", help="Verificar NBR 5422")
         st.number_input("Altura cabo-guarda (m)", key="h_shield", min_value=5.0, step=0.5, format="%.1f", help="Angulo blindagem <= 30deg (IEEE 1243)")
-
+ 
     bk_section("Visualizacao da Torre")
     try:
         geom = _get_geom()
@@ -684,8 +851,13 @@ if page == PAGES[0]:
             ("Cabo Fase", cable.key, "green"),
             ("Circuitos", str(st.session_state.n_circuits), "orange"),
             ("Bundle", f"{st.session_state.bundle_n}x", "gray")])
-
-
+ 
+    # ── CRÍTICO: sincroniza widgets → _proj ao final de cada render da Home ──
+    # _proj persiste mesmo quando o Streamlit limpa as chaves de widget ao
+    # navegar para outros estudos. Sem isso, os estudos usariam defaults.
+    _sync_proj()
+ 
+ 
 # ===================================================================
 # PAGE: PARAMETROS ELETRICOS
 # ===================================================================
@@ -712,7 +884,7 @@ elif page == PAGES[1]:
         _safe(_compute_params)
         _cvr = st.session_state.get("computed_vr") or {}
         _vr_errs = st.session_state.get("vr_errors") or []
-
+ 
         r0 = results[0]
         # KPIs de impedância + Vr principal (se disponível)
         kpis = [("R (Ω/km)", f"{r0.R_ohm_km:.4f}", "blue"), ("X (Ω/km)", f"{r0.X_ohm_km:.4f}", "teal"),
@@ -721,7 +893,7 @@ elif page == PAGES[1]:
             vr0 = list(_cvr.values())[0]
             kpis.append(("Vr (kV)", f"{vr0[0]:.2f}", "red"))
         bk_kpi_row(kpis)
-
+ 
         # Tabela principal — parâmetros + Vr
         rows = []
         for r in results:
@@ -739,7 +911,7 @@ elif page == PAGES[1]:
                 row["Reg. (%)"] = f"{reg:.2f}"
             rows.append(row)
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
+ 
         # ── Seção detalhada de Vr ──────────────
         if _cvr:
             bk_section("Tensão de Chegada (Vr) — Calculada via Modelo π Nominal")
@@ -774,7 +946,7 @@ elif page == PAGES[1]:
                 with st.expander("Detalhes do erro"):
                     for e in _vr_errs:
                         st.code(e)
-
+ 
         tab_g, tab_pi = st.tabs(["Torre", "Modelo π"])
         with tab_g: st.plotly_chart(_plot_tower(_get_geom()), use_container_width=True)
         with tab_pi:
@@ -800,7 +972,7 @@ elif page == PAGES[1]:
                 with d1: st.write(f"R={r.R_ohm_km:.6f} X={r.X_ohm_km:.6f} ohm/km")
                 with d2: st.write(f"L={r.L_mH_km:.4f} mH/km C={r.C_nF_km:.4f} nF/km")
                 with d3: st.write(f"Zc={r.Zc_ohm:.2f} SIL={r.SIL_MW:.2f} Ec={r.Ec_kV_cm:.4f} lambda={r.lambda_m:.0f}m")
-
+ 
         # Salva estudo no Neon
         _input_d = {"voltage_kv": st.session_state.voltage_kv, "line_length_km": st.session_state.line_length_km,
                      "temp_C": st.session_state.temp_C, "freq_hz": st.session_state.freq_hz}
@@ -810,10 +982,10 @@ elif page == PAGES[1]:
             _result_d["vr_computed"] = {str(k): {"Vr_kV": v[0], "ang": v[1], "I_A": v[2], "Ploss": v[3]}
                                          for k, v in _cvr.items()}
         _save_study_btn("params", "Parâmetros Elétricos", _input_d, _result_d)
-
+ 
         _report_btns("params", extract_func=rb.extract_params, result_key="results")
     else: st.info("Configure dados na Home e clique Calcular.")
-
+ 
 # ===================================================================
 # PAGE: BANCO DE CABOS
 # ===================================================================
@@ -844,8 +1016,8 @@ elif page == PAGES[2]:
         st.write(f"R_ac({s.temp_C:.0f}C,{s.freq_hz:.0f}Hz)={R_ac:.6f} ohm/km | Bundle {s.bundle_n}x -> GMR_eq={GMR_eq*1000:.3f}mm")
     bk_kpi_row([("Total", str(len(edited)), "blue"), ("Materiais", str(edited["Material"].nunique()), "teal"),
         ("Area Min", f"{edited['Area_kcmil'].min():.0f}", "green"), ("Area Max", f"{edited['Area_kcmil'].max():.0f}", "orange")])
-
-
+ 
+ 
 # ===================================================================
 # PAGE: CORONA
 # ===================================================================
@@ -892,7 +1064,7 @@ elif page == PAGES[3]:
             st.plotly_chart(fig, use_container_width=True)
         _report_btns("corona", extract_func=rb.extract_corona, result_key="corona_results")
     else: st.info("Configure e clique Calcular Corona.")
-
+ 
 # ===================================================================
 # PAGE: CAMPOS EM
 # ===================================================================
@@ -908,7 +1080,7 @@ elif page == PAGES[4]:
             "Distância lateral mínima recomendada: **±30 m** a partir do eixo da linha. "
             "Campo E: MSC com Método das Imagens. Campo B: Imagens Complexas de Deri."
         )
-
+ 
         fc1, fc2, fc3, fc4 = st.columns(4)
         with fc1:
             f_hobs = st.number_input("Altura obs (m)", value=1.5, step=0.5,
@@ -930,7 +1102,7 @@ elif page == PAGES[4]:
                 help="ANEEL RN 915/2021: 8,33 kV/m (acesso restrito)")
             f_Blim_o = st.number_input("Lim. B ocupacional (µT)", value=1000.0, step=50.0,
                 help="ANEEL RN 915/2021: 1000 µT (acesso restrito)")
-
+ 
         bk_section("Dados do Solo (Campo B — Método de Deri)")
         sd1, sd2 = st.columns(2)
         with sd1:
@@ -939,7 +1111,7 @@ elif page == PAGES[4]:
         with sd2:
             f_Ic = st.number_input("Corrente manual por circuito (A) — 0 = automático", value=0.0, step=50.0,
                 help="Se 0, calcula automaticamente por S e V")
-
+ 
         if st.button("⚡ Calcular Campos", type="primary", use_container_width=True):
             def _run_fields():
                 s   = st.session_state
@@ -964,7 +1136,7 @@ elif page == PAGES[4]:
             if fr:
                 st.session_state.fields_result = fr
                 st.success("✅ Campos calculados com sucesso!")
-
+ 
         fr = st.session_state.get("fields_result")
         if fr:
             lim = fr.limits
@@ -977,7 +1149,7 @@ elif page == PAGES[4]:
                 ("h_obs (m)",        f"{fr.config.h_obs_m:.1f}",    "gray"),
                 ("ρ_solo (Ω·m)",     f"{fr.config.rho_solo:.0f}",   "gray"),
             ])
-
+ 
             # Status de conformidade — dois limites
             col_e, col_b = st.columns(2)
             with col_e:
@@ -1002,13 +1174,13 @@ elif page == PAGES[4]:
                           f"{fr.B_max_uT:.3f} µT",
                           delta=f"{'✅ ATENDE' if ok_b_o else '❌ EXCEDE'} lim. {lim.B_max_uT_ocup:.0f} µT",
                           delta_color="normal" if ok_b_o else "inverse")
-
+ 
             # ── Abas: 2D (perfis) + 3D interativo ──────────────────────
             tab_2d_e, tab_2d_b, tab_3d_e, tab_3d_b = st.tabs([
                 "📈 Perfil E (2D)", "📈 Perfil B (2D)",
                 "🌐 Mapa 3D |E|",   "🌐 Mapa 3D |B|",
             ])
-
+ 
             with tab_2d_e:
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=fr.x_m, y=fr.E_kV_m, mode="lines",
@@ -1035,7 +1207,7 @@ elif page == PAGES[4]:
                     yaxis=dict(rangemode="tozero", range=[0, _e_ymax]))
                 st.plotly_chart(fig, use_container_width=True)
                 st.info(fr.E_compliance_msg)
-
+ 
             with tab_2d_b:
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=fr.x_m, y=fr.B_uT, mode="lines",
@@ -1060,7 +1232,7 @@ elif page == PAGES[4]:
                     yaxis=dict(rangemode="tozero", range=[0, _b_ymax]))
                 st.plotly_chart(fig, use_container_width=True)
                 st.info(fr.B_compliance_msg)
-
+ 
             with tab_3d_e:
                 st.caption("Superfície 3D interativa: |E|(x, z) — arraste para rotacionar, zoom com scroll.")
                 with st.spinner("Calculando superfície 3D do campo elétrico..."):
@@ -1100,7 +1272,7 @@ elif page == PAGES[4]:
                             st.warning("Não foi possível gerar a grade 3D para campo elétrico.")
                     except Exception as _e3d:
                         st.error(f"Erro ao gerar mapa 3D |E|: {_e3d}")
-
+ 
             with tab_3d_b:
                 st.caption("Superfície 3D interativa: |B|(x, z) — arraste para rotacionar, zoom com scroll.")
                 with st.spinner("Calculando superfície 3D do campo magnético..."):
@@ -1139,7 +1311,7 @@ elif page == PAGES[4]:
                             st.warning("Não foi possível gerar a grade 3D para campo magnético.")
                     except Exception as _e3d:
                         st.error(f"Erro ao gerar mapa 3D |B|: {_e3d}")
-
+ 
             _report_btns("campos_em", extract_func=rb.extract_fields, result_key="fields_result")
         else:
             st.info("Configure os parâmetros acima e clique **⚡ Calcular Campos**.")
@@ -1148,7 +1320,7 @@ elif page == PAGES[4]:
             **Limites:** E ≤ 4,17 kV/m e B ≤ 200 µT (público geral) | E ≤ 8,33 kV/m e B ≤ 1000 µT (ocupacional)  
             **Metodologia:** MSC com Imagens Elétricas (Campo E) + Imagens Complexas de Deri (Campo B)
             """)
-
+ 
 # ===================================================================
 # PAGE: AMPACIDADE & FLECHA
 # ===================================================================
@@ -1197,8 +1369,8 @@ elif page == PAGES[5]:
             st.plotly_chart(fig, use_container_width=True)
         _report_btns("ampacidade", extract_func=rb.extract_ampacity, result_key="amp_result")
     else: st.info("Clique Calcular Ampacidade.")
-
-
+ 
+ 
 # ===================================================================
 # PAGE: RI E RA
 # ===================================================================
@@ -1248,7 +1420,7 @@ elif page == PAGES[6]:
                 st.info(f"RA: {prof.comment_RA}")
             _report_btns("ri_ra", extract_func=rb.extract_ri_ra, result_key="rira_results")
         else: st.info("Calcule Parametros primeiro, depois RI/RA.")
-
+ 
 # ===================================================================
 # PAGE: BLINDAGEM
 # ===================================================================
@@ -1290,7 +1462,7 @@ elif page == PAGES[7]:
         st.plotly_chart(fig, use_container_width=True)
         _report_btns("blindagem", extract_func=rb.extract_shielding, result_key="shield_result")
     else: st.info("Configure e clique Calcular Blindagem.")
-
+ 
 # ===================================================================
 # PAGE: ISOLAMENTO VMAX
 # ===================================================================
@@ -1357,8 +1529,8 @@ elif page == PAGES[8]:
         st.plotly_chart(fig, use_container_width=True)
         _report_btns("vmax", extract_func=rb.extract_vmax, result_key="vmax_results")
     else: st.info("Preencha tabela e clique Verificar.")
-
-
+ 
+ 
 # ===================================================================
 # PAGE: COORD. ISOLAMENTO
 # ===================================================================
@@ -1424,7 +1596,7 @@ elif page == PAGES[9]:
             st.markdown(cr.resumo_coord)
         _report_btns("coord_isol", extract_func=rb.extract_coord_isol, result_key="coord_result")
     else: st.info("Clique Calcular Coord. Isolamento.")
-
+ 
 # ===================================================================
 # PAGE: RELIGAMENTO TRIPOLAR
 # ===================================================================
@@ -1472,7 +1644,7 @@ elif page == PAGES[10]:
                 st.dataframe(pd.DataFrame(w_data), use_container_width=True, hide_index=True)
         _report_btns("religamento", extract_func=rb.extract_reclosing, result_key="recl_result")
     else: st.info("Calcule Parametros primeiro, depois Religamento.")
-
+ 
 # ===================================================================
 # PAGE: COMPAT. ELETROMAGNETICA
 # ===================================================================
@@ -1514,7 +1686,7 @@ elif page == PAGES[11]:
             with st.expander("Resumo"): st.markdown(er.summary)
         _report_btns("emi", extract_func=rb.extract_emi, result_key="emi_result")
     else: st.info("Clique Calcular EMI.")
-
+ 
 # ===================================================================
 # PAGE: FLUXO DE POTENCIA
 # ===================================================================
@@ -1548,7 +1720,7 @@ elif page == PAGES[12]:
         }
         ed_bus = st.data_editor(st.session_state.pf_buses, column_config=pf_bcfg, num_rows="dynamic", use_container_width=True, hide_index=True, key="pf_bus_ed")
         st.session_state.pf_buses = ed_bus
-
+ 
         bk_section("Ramos - Tabela Editavel")
         if "pf_branches" not in st.session_state:
             st.session_state.pf_branches = pd.DataFrame([
@@ -1565,7 +1737,7 @@ elif page == PAGES[12]:
         }
         ed_br = st.data_editor(st.session_state.pf_branches, column_config=pf_brcfg, num_rows="dynamic", use_container_width=True, hide_index=True, key="pf_br_ed")
         st.session_state.pf_branches = ed_br
-
+ 
         if st.button("Executar Fluxo", type="primary", use_container_width=True):
             def _run_pf():
                 buses = []
@@ -1623,7 +1795,7 @@ elif page == PAGES[12]:
             fig.update_layout(**PLOTLY_LAYOUT, title="Perfil de Tensao", yaxis_title="V (pu)", height=380)
             st.plotly_chart(fig, use_container_width=True)
             _report_btns("fluxo", extract_func=rb.extract_power_flow, result_key="pf_result", case_obj=st.session_state.get("pf_case"))
-
+ 
 # ===================================================================
 # FOOTER
 # ===================================================================
