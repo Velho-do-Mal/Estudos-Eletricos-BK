@@ -130,6 +130,7 @@ if abs(_cur_v - _prev_v) > 0.01:
                 "reclosing_result", "emi_result", "ri_ra_result", "pf_result",
                 "computed_vr"]:
         if _ck in st.session_state:
+            del st.session_state[_ck]
 
 # Invalidação de cache por mudança de cabo/geometria
 _cur_cable = st.session_state.get("cable_phase_key", "")
