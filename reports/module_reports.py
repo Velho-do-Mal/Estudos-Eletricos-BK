@@ -180,43 +180,80 @@ def report_parametros(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any
     )
 
     # 3. Metodologia
-    rpt.add_heading1("Metodologia")
+    rpt.add_heading1("3. Metodologia")
     rpt.add_body(
         "A metodologia empregada baseia-se no cálculo clássico de parâmetros de linhas de "
-        "transmissão com retorno pelo solo, utilizando as seguintes etapas:"
+        "transmissão, conforme Stevenson (1982), Glover/Sarma (2017) e Fuchs (1979), "
+        "seguindo as etapas descritas a seguir."
     )
-    rpt.add_body_list([
-        "Definição da geometria da torre e posição dos condutores (x, y) em metros;",
-        "Cálculo da distância média geométrica (GMD) entre fases;",
-        "Determinação dos equivalentes do feixe (GMR_eq e r_eq) para n subcondutores;",
-        "Cálculo da resistência AC considerando efeito pelicular (skin effect) e temperatura;",
-        "Cálculo da indutância e capacitância por unidade de comprimento;",
-        "Determinação da impedância característica e potência natural (SIL).",
-    ])
 
-    rpt.add_heading2("Equações Fundamentais")
-
-    rpt.add_body("A impedância série por unidade de comprimento é dada por:")
+    rpt.add_heading2("3.1 Impedância série")
+    rpt.add_body(
+        "A impedância série por unidade de comprimento combina resistência e reatância indutiva. "
+        "É o parâmetro que governa as perdas ôhmicas e o carregamento reativo da linha — "
+        "sua determinação precisa é essencial para cálculo de fluxo de potência e estabilidade:"
+    )
     rpt.add_equation(omml.eq_impedance_series(), "Impedância série por km")
 
-    rpt.add_body("A indutância por unidade de comprimento, considerando o feixe equivalente:")
+    rpt.add_heading2("3.2 Indutância e GMR equivalente do feixe")
+    rpt.add_body(
+        "A indutância depende do raio médio geométrico (GMR) do condutor — ou do GMR "
+        "equivalente do feixe, que captura o efeito da distribuição de n subcondutores sobre "
+        "a indutividade. Usa-se a formulação com GMR_eq porque condutores em feixe "
+        "concentram parte do fluxo magnético entre os subcondutores, reduzindo a reatância "
+        "série em relação a um único condutor de mesma seção:"
+    )
+    rpt.add_equation(omml.eq_gmr_bundle(), "GMR equivalente do feixe (n subcondutores)")
+    rpt.add_body(
+        "onde d_s é a distância entre subcondutores adjacentes e n é o número de subcondutores. "
+        "Com o GMR_eq determinado:"
+    )
     rpt.add_equation(omml.eq_inductance(), "Indutância por km")
+    rpt.add_body(
+        "A distância média geométrica (GMD) entre fases é necessária porque a reatância "
+        "indutiva depende do acoplamento magnético mútuo entre os condutores de cada fase — "
+        "o GMD é a média geométrica das distâncias entre todos os pares de condutores."
+    )
 
-    rpt.add_body("A capacitância por unidade de comprimento:")
+    rpt.add_heading2("3.3 Capacitância")
+    rpt.add_body(
+        "A capacitância shunt determina a corrente de carga (charging current) da linha, "
+        "decisiva em linhas longas (>300 km) para o perfil de tensão e geração de reativo. "
+        "Utiliza-se o raio equivalente do feixe r_eq (ao invés do GMR) pois a capacitância "
+        "depende da distribuição de cargas elétricas na superfície do condutor:"
+    )
     rpt.add_equation(omml.eq_capacitance(), "Capacitância por km")
 
-    rpt.add_body("O raio médio geométrico equivalente do feixe de n subcondutores:")
-    rpt.add_equation(omml.eq_gmr_bundle(), "GMR equivalente do feixe")
-
-    rpt.add_body("A resistência AC, considerando o efeito pelicular:")
+    rpt.add_heading2("3.4 Resistência AC e efeito pelicular")
+    rpt.add_body(
+        "Em corrente alternada, a corrente tende a concentrar-se na superfície do condutor "
+        "(efeito pelicular), aumentando a resistência efetiva em relação ao valor DC. "
+        "Além disso, a resistência aumenta com a temperatura. A correção é feita por:"
+    )
     rpt.add_equation(omml.eq_rac(), "Resistência AC com skin effect")
+    rpt.add_body(
+        "onde δ_skin = √(2ρ/ωμ) é a profundidade de penetração. Para condutores ACSR "
+        "em 60 Hz, o aumento de R_ac sobre R_dc varia de ~2% (cabo pequeno) a ~10% (cabo grande)."
+    )
 
-    rpt.add_body("A impedância característica e a potência natural:")
-    rpt.add_equation(omml.eq_characteristic_impedance(), "Impedância característica")
-    rpt.add_equation(omml.eq_sil(), "Potência natural (SIL)")
+    rpt.add_heading2("3.5 Impedância característica e potência natural (SIL)")
+    rpt.add_body(
+        "A impedância característica Zc e a potência natural SIL são parâmetros que permitem "
+        "avaliar rapidamente o regime de operação da linha: quando P_transmitida > SIL, a linha "
+        "consome reativo (regime indutivo); quando P < SIL, a linha gera reativo (regime capacitivo). "
+        "Essa informação é crucial para decidir a necessidade de compensação reativa:"
+    )
+    rpt.add_equation(omml.eq_characteristic_impedance(), "Impedância característica (Ω)")
+    rpt.add_equation(omml.eq_sil(), "Potência natural — SIL (MW)")
 
-    rpt.add_body("O modelo π equivalente da linha para comprimento L:")
-    rpt.add_equation(omml.eq_pi_model(), "Modelo π equivalente")
+    rpt.add_heading2("3.6 Modelo π equivalente")
+    rpt.add_body(
+        "O modelo π concentrado é a representação padrão para estudos de regime permanente. "
+        "Ele concentra os parâmetros distribuídos em três elementos: impedância série Z_serie "
+        "e dois elementos shunt Y_shunt/2 em cada extremidade. É exato para comprimentos curtos "
+        "(<150 km) e adequado para comprimentos médios com correção hiperbólica:"
+    )
+    rpt.add_equation(omml.eq_pi_model(), "Modelo π equivalente da linha")
 
     # 4. Resultados
     rpt.add_heading1("Resultados Obtidos")
@@ -432,21 +469,52 @@ def report_corona(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
     )
 
     # Metodologia
-    rpt.add_heading1("Metodologia")
+    rpt.add_heading1("3. Metodologia")
     rpt.add_body(
-        "O gradiente elétrico crítico de corona é calculado pela fórmula de Peek, que considera "
-        "a densidade relativa do ar (δ), o fator de rugosidade superficial (m₀) e o raio do condutor:"
+        "O efeito corona inicia quando o campo elétrico superficial do condutor supera o campo "
+        "crítico de ionização do ar. A metodologia adota a fórmula empírica de Peek (1929), "
+        "validada em décadas de medições de campo e consagrada pelo EPRI, CIGRÉ e IEEE."
     )
-    rpt.add_equation(omml.eq_peek_corona(), "Gradiente crítico de Peek (kV/cm)")
-    rpt.add_body("Onde a densidade relativa do ar δ é calculada por:")
-    rpt.add_equation(omml.eq_air_density(), "Fator de densidade do ar")
+
+    rpt.add_heading2("3.1 Densidade relativa do ar")
     rpt.add_body(
-        "Sendo p a pressão atmosférica (cmHg) e T a temperatura ambiente (°C). "
-        "O fator m₀ varia de 0.8 a 1.0, dependendo das condições da superfície do condutor "
-        "(m₀ = 1.0 para condutor limpo e seco; m₀ ≈ 0.8 para tempo chuvoso)."
+        "O campo crítico de Peek é calibrado para condições-padrão de 25 °C e 1 atm. "
+        "Para corrigir os efeitos de altitude e temperatura — que reduzem a densidade do ar "
+        "e, portanto, o campo necessário para ionização — utiliza-se o fator δ:"
     )
-    rpt.add_body("A tensão crítica visual de corona é dada por:")
-    rpt.add_equation(omml.eq_corona_voltage(), "Tensão crítica de corona")
+    rpt.add_equation(omml.eq_air_density(), "Fator de densidade relativa do ar δ")
+    rpt.add_body(
+        "onde p é a pressão atmosférica em cmHg e T é a temperatura em °C. "
+        "Em altitudes elevadas (ex.: 1 500 m), δ cai para ~0,82, reduzindo o gradiente crítico "
+        "em ~18% — o que pode inviabilizar projetos dimensionados para nível do mar."
+    )
+
+    rpt.add_heading2("3.2 Gradiente crítico de corona (Peek)")
+    rpt.add_body(
+        "O campo elétrico superficial crítico acima do qual a ionização do ar se inicia "
+        "é dado pela fórmula de Peek. O expoente 0,301/√(δ·r) captura a influência da "
+        "curvatura superficial — condutores finos têm campo mais concentrado na superfície "
+        "e coronam com gradiente menor:"
+    )
+    rpt.add_equation(omml.eq_peek_corona(), "Gradiente crítico de Peek — Ec (kV/cm)")
+    rpt.add_body(
+        "O fator m₀ penaliza condições adversas: m₀ = 1,0 (condutor polido, seco), "
+        "m₀ ≈ 0,87 (condutor encordoado, seco) e m₀ ≈ 0,72–0,80 (tempo chuvoso). "
+        "O projeto deve satisfazer E_superficial < Ec para m₀ da condição mais desfavorável."
+    )
+
+    rpt.add_heading2("3.3 Tensão crítica visual de corona")
+    rpt.add_body(
+        "A tensão de fase correspondente ao início de corona é obtida integrando o campo "
+        "elétrico desde a superfície do condutor até a distância equivalente à GMD entre fases. "
+        "Esta tensão define a margem de segurança em relação à tensão nominal da linha:"
+    )
+    rpt.add_equation(omml.eq_corona_voltage(), "Tensão crítica visual de corona — Vd (kV)")
+    rpt.add_body(
+        "A margem é calculada como: margem (%) = (Vd − V_fase) / V_fase × 100%. "
+        "Valores positivos indicam ausência de corona; valores negativos indicam corona ativa. "
+        "A prática de projeto adota margem mínima de 10% para condição de chuva."
+    )
 
     # Resultados
     rpt.add_heading1("Resultados Obtidos")
@@ -603,59 +671,47 @@ def report_campos_em(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]
     rpt.add_heading1("5. Metodologia de Cálculo")
     rpt.add_heading2("5.1 Campo Elétrico — MSC com Método das Imagens")
     rpt.add_body(
-        "O método mais frequentemente utilizado para o cálculo de campo elétrico em "
-        "linhas de transmissão é o Método da Simulação de Cargas (MSC). Neste método, "
-        "o potencial elétrico complexo de cada fase é convertido em cargas elétricas "
-        "fictícias equivalentes por fase, obtidas pela multiplicação da matriz de "
-        "capacitâncias próprias e mútuas pela matriz de potenciais:"
+        "O Método da Simulação de Cargas (MSC) calcula o campo elétrico convertendo o potencial "
+        "complexo de cada fase em cargas lineares equivalentes. O método é escolhido porque, "
+        "diferentemente de métodos de elementos finitos, é analítico e computacionalmente "
+        "eficiente para a geometria 2D de linhas de transmissão longas:"
     )
-    rpt.add_body("  [Q̇] = [C] · [V̇]")
+    rpt.add_equation(omml.eq_msc_charges(), "MSC — cargas equivalentes por fase [C/m]")
     rpt.add_body(
-        "Onde [Q̇] é a matriz das cargas complexas (C/m), [C] é a matriz de "
-        "capacitâncias da linha (F/km) e [V̇] é a matriz das tensões complexas por fase."
+        "onde [Q̇] é a matriz das cargas complexas (C/m), [C] é a matriz de capacitâncias "
+        "próprias e mútuas da linha (F/km) e [V̇] é a matriz das tensões fasoriais por fase. "
+        "O Método das Imagens é aplicado para impor a condição de contorno de potencial zero "
+        "no plano do solo: cada condutor real tem uma imagem espelhada em y_img = −yᵢ com "
+        "carga de sinal oposto. A componente horizontal do campo em (x,y) resulta em:"
     )
+    rpt.add_equation(omml.eq_msc_electric_field_x(), "Campo elétrico horizontal — MSC com imagens")
     rpt.add_body(
-        "Considerando o solo como plano equipotencial (potencial nulo), as componentes "
-        "fasoriais horizontal (Ėxt) e vertical (Ėyt) do campo elétrico no ponto (x; y) são:"
-    )
-    rpt.add_body(
-        "  Ėxt = (1/2πε₀) Σ q̇ᵢ { (x−xᵢ)/[(x−xᵢ)²+(y−yᵢ)²] − (x−xᵢ)/[(x−xᵢ)²+(y+yᵢ)²] }"
-    )
-    rpt.add_body(
-        "  Ėyt = (1/2πε₀) Σ q̇ᵢ { (y−yᵢ)/[(x−xᵢ)²+(y−yᵢ)²] − (y+yᵢ)/[(x−xᵢ)²+(y+yᵢ)²] }"
-    )
-    rpt.add_body(
-        "O segundo termo de cada equação representa a contribuição da imagem elétrica "
-        "do condutor (espelhada em y_img = −yᵢ), garantindo que o potencial seja nulo "
-        "no plano do solo. O campo resultante é: |E| = √(|Ėxt|² + |Ėyt|²)  [V/m]."
+        "O segundo somatório representa a contribuição das imagens elétricas. "
+        "O campo resultante é calculado como: |E| = √(|Ėxt|² + |Ėyt|²) [V/m], "
+        "convertido para kV/m no relatório."
     )
     rpt.add_heading2("5.2 Campo Magnético — Imagens Complexas de Deri")
     rpt.add_body(
-        "Para o campo magnético, adota-se o Método das Imagens Complexas de Deri "
-        "(DERI et al., IEEE Trans. PAS, 1981), que inclui o efeito das correntes de "
-        "retorno pelo solo. A profundidade complexa de retorno é:"
+        "Para o campo magnético adota-se o Método das Imagens Complexas de Deri "
+        "(DERI et al., IEEE Trans. PAS, 1981). Este método supera o modelo de solo perfeito "
+        "porque inclui as correntes de retorno pelo solo, que percorrem uma profundidade "
+        "finita determinada pela resistividade do solo — efeito relevante quando ρs < 100 Ω·m. "
+        "A profundidade complexa de retorno é:"
     )
+    rpt.add_equation(omml.eq_deri_depth(), "Profundidade complexa de retorno (Deri)")
     rpt.add_body(
-        "  p = √(ρs / j·ω·μ₀)"
+        "onde ρs é a resistividade do solo (Ω·m), ω = 2πf é a frequência angular e "
+        "μ₀ = 4π×10⁻⁷ H/m. A coordenada da imagem complexa do condutor i passa a ser:"
     )
+    rpt.add_equation(omml.eq_deri_image(), "Coordenada da imagem complexa de Deri")
     rpt.add_body(
-        "Onde ρs é a resistividade do solo (Ω·m), ω = 2πf é a frequência angular e "
-        "μ₀ = 4π×10⁻⁷ H/m é a permeabilidade magnética do vácuo. "
-        "A nova coordenada da imagem complexa passa a ser: y'ᵢ = −yᵢ − 2p."
+        "O campo magnético resultante — somando condutores reais e suas imagens — é:"
     )
+    rpt.add_equation(omml.eq_magnetic_field_resultant(), "Campo magnético resultante |B| (T)")
     rpt.add_body(
-        "As componentes do campo magnético incluindo o efeito do retorno pelo solo são:"
-    )
-    rpt.add_body(
-        "  Ḃxt = (μ₀/2π) Σ İᵢ { (−(y−yᵢ))/r²ᵢ − (−(y−y'ᵢ))/r²ᵢ_img }"
-    )
-    rpt.add_body(
-        "  Ḃyt = (μ₀/2π) Σ İᵢ { (x−xᵢ)/r²ᵢ − (x−xᵢ)/r²ᵢ_img }"
-    )
-    rpt.add_body(
-        "Resultante: |B| = √(|Ḃxt|² + |Ḃyt|²)  [T]  →  relatório em µT. "
-        "Conforme VIEIRA (UFSJ, 2013), para ρs ≥ 50 Ω·m os resultados são equivalentes "
-        "aos do solo perfeito."
+        "Conforme VIEIRA (UFSJ, 2013), para ρs ≥ 50 Ω·m os resultados são praticamente "
+        "equivalentes ao modelo de solo perfeito; para ρs < 50 Ω·m a correção de Deri "
+        "pode aumentar |B| em até 15%."
     )
     rpt.add_heading2("5.3 Considerações Gerais")
     rpt.add_body(
@@ -969,19 +1025,43 @@ def report_ampacidade(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any
         "de operação, verificando o atendimento aos critérios de segurança e distâncias mínimas."
     )
 
-    rpt.add_heading1("Metodologia")
-    rpt.add_body("O balanço térmico em regime permanente conforme IEEE 738 é dado por:")
-    rpt.add_equation(omml.eq_ieee738_thermal(), "Equação de balanço térmico (IEEE 738)")
+    rpt.add_heading1("3. Metodologia")
+
+    rpt.add_heading2("3.1 Balanço térmico em regime permanente (IEEE 738)")
     rpt.add_body(
-        "Onde: q_c é o calor dissipado por convecção (W/m), q_r é o calor dissipado por "
-        "radiação (W/m), q_s é o ganho por radiação solar (W/m), I é a corrente (A) e "
-        "R(Tc) é a resistência AC do condutor na temperatura Tc."
+        "A ampacidade é determinada pela temperatura máxima admissível do condutor "
+        "(tipicamente 75 °C para ACSR operação normal, ou 100 °C para emergência). "
+        "A norma IEEE Std 738-2012 é adotada porque estabelece um modelo físico completo "
+        "do balanço de calor, explicitando cada mecanismo de troca térmica:"
     )
-    rpt.add_body("A flecha do condutor no vão é calculada pela aproximação parabólica:")
-    rpt.add_equation(omml.eq_sag(), "Flecha parabólica")
+    rpt.add_equation(omml.eq_ieee738_thermal(), "Balanço térmico em regime permanente (IEEE 738)")
     rpt.add_body(
-        "Onde: w é o peso linear do condutor (N/m), L é o comprimento do vão (m) e "
-        "T é a tração horizontal no condutor (N)."
+        "Onde: q_c é o calor dissipado por convecção natural e forçada (W/m) — "
+        "principal mecanismo de resfriamento; q_r é o calor dissipado por radiação "
+        "infravermelha do condutor aquecido (W/m); q_s é o ganho por absorção de "
+        "radiação solar (W/m); I² · R(Tc) é a geração de calor por efeito Joule (W/m). "
+        "O calor de convecção forçada depende da velocidade do vento — razão pela qual "
+        "o projeto adota condição conservadora (vento mínimo de 0,6 m/s)."
+    )
+    rpt.add_body(
+        "A resistência AC na temperatura Tc é corrigida linearmente a partir do valor "
+        "tabelado a 25 °C, usando o coeficiente de temperatura do material conductor. "
+        "Para ampacidade, isola-se I da equação de balanço (q_c + q_r − q_s = I²·R(Tc))."
+    )
+
+    rpt.add_heading2("3.2 Flecha e tracionamento (parábola)")
+    rpt.add_body(
+        "A flecha do condutor cresce com a temperatura porque o aumento térmico dilata o "
+        "comprimento do cabo e reduz a tensão mecânica. O cálculo de flecha é obrigatório "
+        "para verificar as distâncias mínimas de segurança à vegetação e ao solo "
+        "(NBR 5422, Tabela 6). A aproximação parabólica é adequada quando flecha < vão/8:"
+    )
+    rpt.add_equation(omml.eq_sag(), "Flecha parabólica (approximação para f < L/8)")
+    rpt.add_body(
+        "onde w é o peso linear total do condutor (N/m) — incluindo gelo e vento se aplicável —, "
+        "L é o vão (m) e T é a tração horizontal (N). A tração é obtida pela equação de "
+        "mudança de estado (EDS — Every Day Stress), que relaciona a variação de temperatura "
+        "com a variação de comprimento e carga mecânica no condutor."
     )
 
     # Resultados
@@ -1052,13 +1132,37 @@ def report_ri_ra(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
         "em condições de tempo seco e chuvoso."
     )
 
-    rpt.add_heading1("Metodologia")
+    rpt.add_heading1("3. Metodologia")
+
+    rpt.add_heading2("3.1 Interferência radioelétrica (RI)")
     rpt.add_body(
-        "Os níveis de RI e RA são estimados a partir do gradiente elétrico superficial do "
-        "condutor, utilizando fórmulas empíricas do EPRI (Transmission Line Reference Book). "
-        "O cálculo considera o número de subcondutores, diâmetro, espaçamento do feixe e "
-        "condições meteorológicas (seco/chuva). A atenuação lateral é calculada considerando "
-        "propagação sobre solo plano."
+        "A RI é causada pelas descargas parciais de corona que geram pulsos de corrente "
+        "impulsiva nos condutores, irradiando energia eletromagnética na faixa de AM "
+        "(500 kHz a 1,6 MHz). O nível de RI depende diretamente do gradiente superficial "
+        "do condutor — razão pela qual o cálculo de corona é um pré-requisito. "
+        "As fórmulas empíricas do EPRI são calibradas com medições de campo em centenas "
+        "de linhas e são as referências adotadas internacionalmente (IEEE 430, CIGRÉ TB 61):"
+    )
+    rpt.add_equation(omml.eq_ri_epri(), "Nível de RI no feixe (EPRI) — dBµV/m")
+    rpt.add_body(
+        "onde Ec é o gradiente superficial máximo (kV/cm), r é o raio do subcondutor (cm), "
+        "n é o número de subcondutores e os coeficientes k₁–k₄ são calibrados pelo EPRI "
+        "separadamente para condição seca e chuvosa. A atenuação lateral com a distância D "
+        "é somada ao nível base com o termo −10·log(D/D₀)."
+    )
+
+    rpt.add_heading2("3.2 Ruído audível (RA)")
+    rpt.add_body(
+        "O RA é gerado pelas micro-explosões das bolhas d'água nas superfícies dos condutores "
+        "durante chuva — fenômeno que amplia o corona e produz pressão sonora audível "
+        "(frequências de 100 Hz a 10 kHz, ponderação A). A condição crítica é chuva moderada, "
+        "não a seca, ao contrário da RI. O modelo EPRI é:"
+    )
+    rpt.add_equation(omml.eq_ra_epri(), "Nível de RA (EPRI) — dBA")
+    rpt.add_body(
+        "O termo −10·log(D/D₀) representa a atenuação com a distância D à linha. "
+        "O nível medido na borda da faixa de servidão é o critério de verificação. "
+        "Limites típicos adotados no Brasil: RI < 46 dBµV/m, RA < 50 dBA (chuva)."
     )
 
     rpt.add_heading1("Resultados Obtidos")

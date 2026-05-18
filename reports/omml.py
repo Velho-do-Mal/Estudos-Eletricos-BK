@@ -577,3 +577,396 @@ def eq_pi_model():
         math_op("\u00b7"),
         fraction([math_text("L")], [math_num("2")]),
     )
+
+
+# ====================================================================
+# Equações adicionais — incluídas para completar a metodologia
+# dos relatórios conforme padrão do modelo de referência
+# ====================================================================
+
+def eq_msc_charges():
+    """[Q̇] = [C] · [V̇]  — MSC: cargas equivalentes por fase"""
+    return build_omath_para(
+        delimiters([math_text("Q̇")], "[", "]"),
+        math_op(" = "),
+        delimiters([math_text("C")], "[", "]"),
+        math_op(" · "),
+        delimiters([math_text("V̇")], "[", "]"),
+    )
+
+def eq_msc_electric_field_x():
+    """Ėxt = (1/2πε₀) Σ q̇ᵢ { (x−xᵢ)/rᵢ² − (x−xᵢ)/rᵢ_img² }"""
+    return build_omath_para(
+        subscript([math_text("Ė")], [math_text("xt")]),
+        math_op(" = "),
+        fraction(
+            [math_num("1")],
+            [math_num("2"), math_text("π"), subscript([math_text("ε")], [math_num("0")])]
+        ),
+        nary("∑", [math_text("i")], [], [
+            subscript([math_text("q̇")], [math_text("i")]),
+            delimiters([
+                fraction(
+                    [math_text("x"), math_op("−"), subscript([math_text("x")], [math_text("i")])],
+                    [superscript([subscript([math_text("r")], [math_text("i")])], [math_num("2")])]
+                ),
+                math_op(" − "),
+                fraction(
+                    [math_text("x"), math_op("−"), subscript([math_text("x")], [math_text("i")])],
+                    [superscript([subscript([math_text("r")], [math_text("i,img")])], [math_num("2")])]
+                ),
+            ])
+        ]),
+    )
+
+def eq_deri_depth():
+    """p = √(ρs / j·ω·μ₀)  — profundidade complexa de Deri"""
+    return build_omath_para(
+        math_text("p"),
+        math_op(" = "),
+        radical(None, [
+            fraction(
+                [subscript([math_text("ρ")], [math_text("s")])],
+                [math_text("j"), math_op("·"), math_text("ω"), math_op("·"), subscript([math_text("μ")], [math_num("0")])]
+            )
+        ]),
+    )
+
+def eq_deri_image():
+    """y'ᵢ = −yᵢ − 2p  — coordenada imagem complexa"""
+    return build_omath_para(
+        superscript([subscript([math_text("y")], [math_text("i")]), math_op("'")], []),
+        math_op(" = "),
+        math_op("−"),
+        subscript([math_text("y")], [math_text("i")]),
+        math_op(" − "),
+        math_num("2"),
+        math_text("p"),
+    )
+
+def eq_magnetic_field_resultant():
+    """|B| = √(|Ḃxt|² + |Ḃyt|²)"""
+    return build_omath_para(
+        delimiters([math_text("B")], "|", "|"),
+        math_op(" = "),
+        radical(None, [
+            superscript([delimiters([subscript([math_text("Ḃ")], [math_text("xt")])], "|", "|")], [math_num("2")]),
+            math_op(" + "),
+            superscript([delimiters([subscript([math_text("Ḃ")], [math_text("yt")])], "|", "|")], [math_num("2")]),
+        ]),
+    )
+
+def eq_wenner():
+    """ρ_a = 2π·a·R  — resistividade aparente Wenner"""
+    return build_omath_para(
+        subscript([math_text("ρ")], [math_text("a")]),
+        math_op(" = "),
+        math_num("2"),
+        math_text("π"),
+        math_op("·"),
+        math_text("a"),
+        math_op("·"),
+        math_text("R"),
+    )
+
+def eq_two_layer_model():
+    """ρ_a(a) = ρ₁[1 + 4·Σ K^n / √(1+(2nh/a)²) - 2·Σ K^n / √(4+(2nh/a)²)]"""
+    return build_omath_para(
+        subscript([math_text("ρ")], [math_text("a")]),
+        delimiters([math_text("a")]),
+        math_op(" = "),
+        subscript([math_text("ρ")], [math_num("1")]),
+        delimiters([
+            math_num("1"),
+            math_op(" + "),
+            math_num("4"),
+            nary("∑", [math_text("n=1")], [math_op("∞")], [
+                fraction(
+                    [superscript([math_text("K")], [math_text("n")])],
+                    [radical(None, [
+                        math_num("1"),
+                        math_op("+"),
+                        superscript([
+                            delimiters([
+                                fraction([math_num("2"), subscript([math_text("nh")], [])], [math_text("a")])
+                            ])
+                        ], [math_num("2")])
+                    ])]
+                )
+            ]),
+            math_op(" − "),
+            math_num("2"),
+            nary("∑", [math_text("n=1")], [math_op("∞")], [
+                fraction(
+                    [superscript([math_text("K")], [math_text("n")])],
+                    [radical(None, [
+                        math_num("4"),
+                        math_op("+"),
+                        superscript([
+                            delimiters([
+                                fraction([math_num("2"), subscript([math_text("nh")], [])], [math_text("a")])
+                            ])
+                        ], [math_num("2")])
+                    ])]
+                )
+            ]),
+        ]),
+    )
+
+def eq_reflection_coeff():
+    """K = (ρ₂ − ρ₁) / (ρ₂ + ρ₁)"""
+    return build_omath_para(
+        math_text("K"),
+        math_op(" = "),
+        fraction(
+            [subscript([math_text("ρ")], [math_num("2")]), math_op(" − "), subscript([math_text("ρ")], [math_num("1")])],
+            [subscript([math_text("ρ")], [math_num("2")]), math_op(" + "), subscript([math_text("ρ")], [math_num("1")])]
+        ),
+    )
+
+def eq_ieee80_ig():
+    """IG = Sf · Df · 3I₀  — corrente máxima de malha IEEE 80"""
+    return build_omath_para(
+        subscript([math_text("I")], [math_text("G")]),
+        math_op(" = "),
+        subscript([math_text("S")], [math_text("f")]),
+        math_op(" · "),
+        subscript([math_text("D")], [math_text("f")]),
+        math_op(" · "),
+        math_num("3"),
+        subscript([math_text("I")], [math_num("0")]),
+    )
+
+def eq_sverak_conductor():
+    """A = I·√(tcap / (αr·ρr·Kref)) — seção mínima Sverak"""
+    return build_omath_para(
+        math_text("A"),
+        math_op(" = "),
+        subscript([math_text("I")], [math_text("G")]),
+        math_op(" · "),
+        radical(None, [
+            fraction(
+                [subscript([math_text("t")], [math_text("c")]), math_text(" · TCAP")],
+                [subscript([math_text("α")], [math_text("r")]),
+                 math_op(" · "),
+                 subscript([math_text("ρ")], [math_text("r")]),
+                 math_op(" · "),
+                 math_text("K"),
+                 math_op(" · "),
+                 func("ln", [delimiters([
+                     fraction(
+                         [subscript([math_text("K")], [math_num("0")]),
+                          math_op("+"),
+                          subscript([math_text("T")], [math_text("m")])],
+                         [subscript([math_text("K")], [math_num("0")]),
+                          math_op("+"),
+                          subscript([math_text("T")], [math_text("a")])]
+                     )
+                 ])])
+                ]
+            )
+        ]),
+    )
+
+def eq_dalziel():
+    """Ib = k / √ts  — corrente admissível Dalziel"""
+    return build_omath_para(
+        subscript([math_text("I")], [math_text("b")]),
+        math_op(" = "),
+        fraction(
+            [math_text("k")],
+            [radical(None, [subscript([math_text("t")], [math_text("s")])])]
+        ),
+    )
+
+def eq_touch_voltage():
+    """E_toque = (Rb + Rp/2) · Ib"""
+    return build_omath_para(
+        subscript([math_text("E")], [math_text("toque")]),
+        math_op(" = "),
+        delimiters([
+            subscript([math_text("R")], [math_text("b")]),
+            math_op(" + "),
+            fraction(
+                [subscript([math_text("R")], [math_text("p")])],
+                [math_num("2")]
+            )
+        ]),
+        math_op(" · "),
+        subscript([math_text("I")], [math_text("b")]),
+    )
+
+def eq_sverak_resistance():
+    """Rg = ρ[1/Lt + 1/√A·(1 + 1/(1+h√20/A))]"""
+    return build_omath_para(
+        subscript([math_text("R")], [math_text("g")]),
+        math_op(" = "),
+        math_text("ρ"),
+        delimiters([
+            fraction(
+                [math_num("1")],
+                [subscript([math_text("L")], [math_text("t")])]
+            ),
+            math_op(" + "),
+            fraction(
+                [math_num("1")],
+                [radical(None, [math_text("A")])]
+            ),
+            delimiters([
+                math_num("1"),
+                math_op(" + "),
+                fraction(
+                    [math_num("1")],
+                    [math_num("1"),
+                     math_op("+"),
+                     math_text("h"),
+                     radical(None, [
+                         fraction([math_num("20")], [math_text("A")])
+                     ])]
+                )
+            ])
+        ]),
+    )
+
+def eq_mesh_voltage():
+    """Em = ρ · IG · Km · Ki / Lm"""
+    return build_omath_para(
+        subscript([math_text("E")], [math_text("m")]),
+        math_op(" = "),
+        fraction(
+            [math_text("ρ"),
+             math_op(" · "),
+             subscript([math_text("I")], [math_text("G")]),
+             math_op(" · "),
+             subscript([math_text("K")], [math_text("m")]),
+             math_op(" · "),
+             subscript([math_text("K")], [math_text("i")])],
+            [subscript([math_text("L")], [math_text("m")])]
+        ),
+    )
+
+def eq_step_voltage():
+    """Es = ρ · IG · Ks · Ki / Ls"""
+    return build_omath_para(
+        subscript([math_text("E")], [math_text("s")]),
+        math_op(" = "),
+        fraction(
+            [math_text("ρ"),
+             math_op(" · "),
+             subscript([math_text("I")], [math_text("G")]),
+             math_op(" · "),
+             subscript([math_text("K")], [math_text("s")]),
+             math_op(" · "),
+             subscript([math_text("K")], [math_text("i")])],
+            [subscript([math_text("L")], [math_text("s")])]
+        ),
+    )
+
+def eq_decrement_factor():
+    """Df = √(1 + (Ta/tf)·(1 − e^(−2tf/Ta)))"""
+    return build_omath_para(
+        subscript([math_text("D")], [math_text("f")]),
+        math_op(" = "),
+        radical(None, [
+            math_num("1"),
+            math_op(" + "),
+            fraction(
+                [subscript([math_text("T")], [math_text("a")])],
+                [subscript([math_text("t")], [math_text("f")])]
+            ),
+            delimiters([
+                math_num("1"),
+                math_op(" − "),
+                superscript(
+                    [math_text("e")],
+                    [math_op("−"),
+                     fraction(
+                         [math_num("2"), subscript([math_text("t")], [math_text("f")])],
+                         [subscript([math_text("T")], [math_text("a")])]
+                     )]
+                )
+            ])
+        ]),
+    )
+
+def eq_ri_epri():
+    """RI = k₁ + k₂·log(Ec) + k₃·log(r) + k₄·log(n) + k₅·log(d)"""
+    return build_omath_para(
+        math_text("RI"),
+        math_op(" = "),
+        subscript([math_text("k")], [math_num("1")]),
+        math_op(" + "),
+        subscript([math_text("k")], [math_num("2")]),
+        math_op(" · "),
+        func("log", [delimiters([subscript([math_text("E")], [math_text("c")])])]),
+        math_op(" + "),
+        subscript([math_text("k")], [math_num("3")]),
+        math_op(" · "),
+        func("log", [delimiters([math_text("r")])]),
+        math_op(" + "),
+        subscript([math_text("k")], [math_num("4")]),
+        math_op(" · "),
+        func("log", [delimiters([math_text("n")])]),
+    )
+
+def eq_ra_epri():
+    """RA = k₁ + k₂·log(Ec) + k₃·log(r) + k₄·log(n) + atenuação lateral"""
+    return build_omath_para(
+        math_text("RA"),
+        math_op(" = "),
+        subscript([math_text("k")], [math_num("1")]),
+        math_op(" + "),
+        subscript([math_text("k")], [math_num("2")]),
+        math_op(" · "),
+        func("log", [delimiters([subscript([math_text("E")], [math_text("c")])])]),
+        math_op(" + "),
+        subscript([math_text("k")], [math_num("3")]),
+        math_op(" · "),
+        func("log", [delimiters([math_text("r")])]),
+        math_op(" − "),
+        math_num("10"),
+        math_op(" · "),
+        func("log", [delimiters([
+            fraction([math_text("D")], [subscript([math_text("D")], [math_num("0")])])
+        ])]),
+    )
+
+def eq_newton_raphson_full():
+    """[ΔP; ΔQ] = J · [Δθ; ΔV/V]  — Newton-Raphson completo"""
+    return build_omath_para(
+        matrix([
+            [[subscript([math_text("ΔP")], [])]],
+            [[subscript([math_text("ΔQ")], [])]],
+        ]),
+        math_op(" = "),
+        matrix([
+            [[math_text("H")], [math_text("N")]],
+            [[math_text("M")], [math_text("L")]],
+        ]),
+        math_op(" · "),
+        matrix([
+            [[math_text("Δθ")]],
+            [[fraction([math_text("ΔV")], [math_text("V")])]],
+        ]),
+    )
+
+def eq_power_balance():
+    """P_G − P_D = V·Σ V_k·(G_ik·cos + B_ik·sin)"""
+    return build_omath_para(
+        subscript([math_text("P")], [math_text("G")]),
+        math_op(" − "),
+        subscript([math_text("P")], [math_text("D")]),
+        math_op(" = "),
+        subscript([math_text("V")], [math_text("i")]),
+        nary("∑", [math_text("k=1")], [math_text("n")], [
+            subscript([math_text("V")], [math_text("k")]),
+            delimiters([
+                subscript([math_text("G")], [math_text("ik")]),
+                func("cos", [delimiters([subscript([math_text("θ")], [math_text("ik")])])]),
+                math_op(" + "),
+                subscript([math_text("B")], [math_text("ik")]),
+                func("sin", [delimiters([subscript([math_text("θ")], [math_text("ik")])])])
+            ])
+        ]),
+    )
+

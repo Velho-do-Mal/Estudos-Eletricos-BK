@@ -29,7 +29,7 @@ import numpy as np
 MATH_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math"
 
 # Cores BK
-BK_BLUE = RGBColor(0x08, 0x4C, 0x89)
+BK_BLUE = RGBColor(0x1F, 0x4E, 0x79)
 BK_DARK = RGBColor(0x33, 0x33, 0x33)
 BK_GRAY = RGBColor(0x66, 0x66, 0x66)
 BK_LIGHT = RGBColor(0xD5, 0xE8, 0xF0)
@@ -73,12 +73,12 @@ class BKReport:
         section = self.doc.sections[0]
         section.page_width = Cm(21.0)
         section.page_height = Cm(29.7)
-        section.top_margin = Cm(3.5)
-        section.bottom_margin = Cm(2.0)
-        section.left_margin = Cm(3.0)
+        section.top_margin = Cm(2.5)
+        section.bottom_margin = Cm(2.5)
+        section.left_margin = Cm(2.5)
         section.right_margin = Cm(2.0)
-        section.header_distance = Cm(1.0)
-        section.footer_distance = Cm(1.5)
+        section.header_distance = Cm(1.25)
+        section.footer_distance = Cm(1.25)
 
     # ----------------------------------------------------------------
     # Estilos (Body: Arial 12pt, Heading1: Arial 12pt bold caps, etc.)
@@ -86,120 +86,88 @@ class BKReport:
     def _setup_styles(self):
         style = self.doc.styles["Normal"]
         font = style.font
-        font.name = "Arial"
-        font.size = Pt(12)
+        font.name = "Calibri"
+        font.size = Pt(11)
         font.color.rgb = BK_DARK
         pf = style.paragraph_format
         pf.space_before = Pt(6)
         pf.space_after = Pt(6)
-        pf.line_spacing_rule = WD_LINE_SPACING.ONE_POINT_FIVE
+        pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+        pf.line_spacing = 1.15
         pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-        # Heading 1 — Titulo principal BK (bold, caps)
+        # Heading 1 — Titulo principal BK
         h1 = self.doc.styles["Heading 1"]
-        h1.font.name = "Arial"
-        h1.font.size = Pt(13)
+        h1.font.name = "Calibri"
+        h1.font.size = Pt(16)
         h1.font.bold = True
-        h1.font.all_caps = True
+        h1.font.all_caps = False
         h1.font.color.rgb = BK_BLUE
-        h1.paragraph_format.space_before = Pt(18)
-        h1.paragraph_format.space_after = Pt(10)
+        h1.paragraph_format.space_before = Pt(24)
+        h1.paragraph_format.space_after = Pt(6)
         h1.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-        # Heading 2 — Subtitulo BK (bold, underline)
+        # Heading 2 — Subtitulo BK
         h2 = self.doc.styles["Heading 2"]
-        h2.font.name = "Arial"
-        h2.font.size = Pt(12)
+        h2.font.name = "Calibri"
+        h2.font.size = Pt(13)
         h2.font.bold = True
-        h2.font.underline = True
+        h2.font.underline = False
         h2.font.color.rgb = BK_BLUE
-        h2.paragraph_format.space_before = Pt(14)
-        h2.paragraph_format.space_after = Pt(8)
+        h2.paragraph_format.space_before = Pt(10)
+        h2.paragraph_format.space_after = Pt(4)
         h2.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
         # Heading 3
         h3 = self.doc.styles["Heading 3"]
-        h3.font.name = "Arial"
+        h3.font.name = "Calibri"
         h3.font.size = Pt(12)
         h3.font.bold = True
-        h3.font.italic = True
-        h3.font.color.rgb = BK_DARK
+        h3.font.italic = False
+        h3.font.color.rgb = BK_BLUE
         h3.paragraph_format.space_before = Pt(10)
-        h3.paragraph_format.space_after = Pt(6)
+        h3.paragraph_format.space_after = Pt(4)
 
     # ----------------------------------------------------------------
-    # Header com tabela BK
+    # Header simplificado — conforme padrão do modelo de referência
     # ----------------------------------------------------------------
     def _setup_header(self):
         section = self.doc.sections[0]
         header = section.header
         header.is_linked_to_previous = False
 
-        # Tabela do cabecalho: 3 linhas
-        tbl = header.add_table(rows=3, cols=5, width=Cm(16))
-        tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+        # Linha 1: nome da empresa · titulo do documento
+        p1 = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        p1.clear()
+        p1.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        run_empresa = p1.add_run("BK Engenharia")
+        run_empresa.font.name = "Calibri"
+        run_empresa.font.size = Pt(9)
+        run_empresa.font.bold = True
+        run_empresa.font.color.rgb = BK_BLUE
+        run_sep = p1.add_run(f" · {self.titulo_estudo}")
+        run_sep.font.name = "Calibri"
+        run_sep.font.size = Pt(9)
+        run_sep.font.color.rgb = BK_GRAY
 
-        # Estilo das bordas
-        for row in tbl.rows:
-            for cell in row.cells:
-                self._set_cell_border(cell)
-                for p in cell.paragraphs:
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    for r in p.runs:
-                        r.font.size = Pt(8)
-                        r.font.name = "Arial"
+        # Linha separadora
+        p1_border = parse_xml(
+            f'<w:pPr {nsdecls("w")}><w:pBdr>'
+            f'<w:bottom w:val="single" w:sz="4" w:space="1" w:color="1F4E79"/>' 
+            f'</w:pBdr></w:pPr>'
+        )
+        p1._p.insert(0, p1_border)
 
-        # Linha 0: Logo | Nome empresa | (vazio)
-        # Merge colunas centrais
-        c0 = tbl.cell(0, 0)
-        c1 = tbl.cell(0, 1)
-        c2 = tbl.cell(0, 2)
-        c3 = tbl.cell(0, 3)
-        merged_center = c1.merge(c3)
-        merged_center.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = merged_center.paragraphs[0].add_run("BARABACH & KNOPP ENGENHARIA E TECNOLOGIA")
-        run.font.bold = True
-        run.font.size = Pt(10)
-        run.font.name = "Arial"
-        run.font.color.rgb = BK_BLUE
-        p2 = merged_center.add_paragraph()
-        p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r2 = p2.add_run("CNPJ: 41.175.212/0001-97")
-        r2.font.size = Pt(7)
-        r2.font.name = "Arial"
-
-        # Logo (se existir)
-        logo_path = ASSETS_DIR / "bk_logo.jpg"
-        if logo_path.exists():
-            p_logo = c0.paragraphs[0]
-            p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run_logo = p_logo.add_run()
-            run_logo.add_picture(str(logo_path), width=Cm(2.5))
-
-        # Linha 1: labels
-        labels = ["Código", "Revisão", "Documento", "Aprovação", "Pag."]
-        for i, lbl in enumerate(labels):
-            cell = tbl.cell(1, i)
-            cell.paragraphs[0].clear()
-            run = cell.paragraphs[0].add_run(lbl)
-            run.font.bold = True
-            run.font.size = Pt(8)
-            run.font.name = "Arial"
-            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            self._shade_cell(cell, "D5E8F0")
-
-        # Linha 2: valores
-        vals = [self.codigo_doc, self.revisao, self.titulo_estudo, self.aprovacao, ""]
-        for i, val in enumerate(vals):
-            cell = tbl.cell(2, i)
-            cell.paragraphs[0].clear()
-            run = cell.paragraphs[0].add_run(val)
-            run.font.size = Pt(8)
-            run.font.name = "Arial"
-            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        # Linha 2: codigo e revisao (alinhado à direita)
+        p2 = header.add_paragraph()
+        p2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run_cod = p2.add_run(f"{self.codigo_doc}  Rev. {self.revisao}")
+        run_cod.font.name = "Calibri"
+        run_cod.font.size = Pt(8)
+        run_cod.font.color.rgb = BK_GRAY
 
     # ----------------------------------------------------------------
-    # Footer com numero de pagina
+    # Footer com numero de pagina — conforme padrão do modelo
     # ----------------------------------------------------------------
     def _setup_footer(self):
         section = self.doc.sections[0]
@@ -208,22 +176,19 @@ class BKReport:
 
         p = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run("Gerado por BK Estudos Elétricos – Software BK Engenharia e Tecnologia")
-        run.font.size = Pt(7)
-        run.font.name = "Arial"
-        run.font.color.rgb = BK_GRAY
-
-        # Numero de pagina
-        p2 = footer.add_paragraph()
-        p2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run2 = p2.add_run()
-        run2.font.size = Pt(8)
+        run_pre = p.add_run("Página ")
+        run_pre.font.size = Pt(8)
+        run_pre.font.name = "Calibri"
+        run_pre.font.color.rgb = BK_GRAY
+        # campo PAGE
+        run_pg = p.add_run()
+        run_pg.font.size = Pt(8)
         fld_char1 = parse_xml(f'<w:fldChar {nsdecls("w")} w:fldCharType="begin"/>')
-        run2._r.append(fld_char1)
+        run_pg._r.append(fld_char1)
         instr = parse_xml(f'<w:instrText {nsdecls("w")} xml:space="preserve"> PAGE </w:instrText>')
-        run2._r.append(instr)
+        run_pg._r.append(instr)
         fld_char2 = parse_xml(f'<w:fldChar {nsdecls("w")} w:fldCharType="end"/>')
-        run2._r.append(fld_char2)
+        run_pg._r.append(fld_char2)
 
     # ----------------------------------------------------------------
     # Metodos auxiliares de formatacao
@@ -272,8 +237,8 @@ class BKReport:
         pf.space_after = Pt(4)
         pf.line_spacing_rule = WD_LINE_SPACING.ONE_POINT_FIVE
         run = p.add_run(text)
-        run.font.name = "Arial"
-        run.font.size = Pt(12)
+        run.font.name = "Calibri"
+        run.font.size = Pt(11)
         run.font.bold = bold
         run.font.italic = italic
         return p

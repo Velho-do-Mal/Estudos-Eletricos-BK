@@ -56,21 +56,38 @@ def report_blindagem(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]
         "e a taxa de backflashover."
     )
 
-    rpt.add_heading1("Metodologia")
+    rpt.add_heading1("3. Metodologia")
+
+    rpt.add_heading2("3.1 Modelo eletrogeométrico (EGM) — IEEE 1243")
     rpt.add_body(
-        "O ângulo de blindagem é calculado para cada fase em relação ao cabo-guarda mais próximo:"
+        "O Modelo Eletrogeométrico (EGM) é adotado porque correlaciona a geometria do "
+        "relâmpago com a da torre para determinar se o líder descendente atingirá a fase "
+        "ou o cabo-guarda. O EGM é o método padrão do IEEE Std 1243-1997 para linhas de "
+        "transmissão porque: (i) é físico (baseado na teoria do líder escalonado), "
+        "(ii) foi calibrado com dados de centenas de ocorrências reais de raio, e "
+        "(iii) é computacionalmente simples. O ângulo de blindagem para cada fase é:"
     )
-    rpt.add_equation(omml.eq_shielding_angle(), "Ângulo de blindagem")
+    rpt.add_equation(omml.eq_shielding_angle(), "Ângulo de blindagem θ (°)")
     rpt.add_body(
-        "Onde d_h é a distância horizontal entre a fase e o cabo-guarda, e Δh é a diferença "
-        "de altura. O ângulo deve ser inferior ao limite especificado (tipicamente 20° a 30°, "
-        "conforme IEEE 1243)."
+        "onde d_h é a distância horizontal entre o cabo-guarda e o condutor fase, e Δh é a "
+        "diferença de altura. Ângulos θ < 0° indicam blindagem negativa (over-shielding). "
+        "O IEEE 1243 estabelece limites de θ em função da tensão nominal: "
+        "≤ 20° para 69–230 kV; ≤ 10–15° para 345–765 kV; ≤ 0° para ≥ 500 kV."
     )
-    rpt.add_body("A tensão na torre durante backflashover é estimada por:")
-    rpt.add_equation(omml.eq_vtower(), "Tensão na torre (backflashover)")
+
+    rpt.add_heading2("3.2 Backflashover — sobretensão na torre")
     rpt.add_body(
-        "Onde I_desc é a corrente de descarga, R_pe é a resistência de aterramento e "
-        "L·dI/dt representa a contribuição indutiva durante a frente de onda."
+        "Mesmo com blindagem eficaz, uma descarga que atinge o cabo-guarda pode causar "
+        "flashover inverso (backflashover) da torre para o condutor fase, se a tensão "
+        "desenvolvida na torre superar o nível básico de isolamento (NBI) da cadeia. "
+        "A tensão na torre é determinada pela impedância de surto e aterramento da torre:"
+    )
+    rpt.add_equation(omml.eq_vtower(), "Tensão na torre durante impacto de raio (backflashover)")
+    rpt.add_body(
+        "onde I_desc é a corrente de pico do raio (kA), R_pe é a resistência de aterramento "
+        "da torre (Ω) e L·dI/dt é a componente indutiva durante a frente de onda (td ≈ 2 µs). "
+        "O backflashover ocorre quando V_torre > NBI. Por isso a resistência de aterramento "
+        "deve ser minimizada — tipicamente ≤ 10–20 Ω (IEEE 998, ABNT NBR 5419)."
     )
 
     # Resultados
@@ -167,13 +184,48 @@ def report_vmax_insulation(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str
         "e distância de escoamento para o nível de poluição aplicável."
     )
 
-    rpt.add_heading1("Metodologia")
-    rpt.add_body("A tensão de sobretensão temporária é dada por:")
-    rpt.add_equation(omml.eq_vmax_tov(), "Tensão de sobretensão temporária")
-    rpt.add_body("O fator de correção atmosférica por altitude é:")
-    rpt.add_equation(omml.eq_ka_altitude(), "Fator de correção por altitude (IEC 60071-2)")
-    rpt.add_body("A distância de escoamento mínima requerida é:")
-    rpt.add_equation(omml.eq_creepage(), "Distância de escoamento mínima")
+    rpt.add_heading1("3. Metodologia")
+
+    rpt.add_heading2("3.1 Sobretensão temporária (TOV)")
+    rpt.add_body(
+        "As sobretensões temporárias (TOV — Temporary Overvoltages) são elevações de tensão "
+        "de frequência industrial com duração de milissegundos a segundos. As principais causas "
+        "em linhas de transmissão são: rejeição de carga (ferroressonância, efeito Ferranti) "
+        "e faltas fase-terra em redes com neutro isolado ou impedante. "
+        "O dimensionamento usa k_TOV como fator de amplificação da tensão fase-terra, "
+        "conforme tabelas do IEC 60071-2 §2.3 em função do esquema de aterramento do neutro:"
+    )
+    rpt.add_equation(omml.eq_vmax_tov(), "Tensão de sobretensão temporária — V_TOV (kV)")
+    rpt.add_body(
+        "A suportabilidade do equipamento à frequência industrial (U_pf) deve superar V_TOV "
+        "com margem de segurança mínima de 15% (IEC 60071-2 §4.3.3). "
+        "Equipamentos que não atendem são propensos a flashover em regime de falta prolongada."
+    )
+
+    rpt.add_heading2("3.2 Correção atmosférica por altitude")
+    rpt.add_body(
+        "A rigidez dielétrica do ar diminui exponencialmente com a altitude porque a "
+        "densidade do ar — e consequentemente a concentração de moléculas capazes de "
+        "absorver a energia dos elétrons acelerados — é menor. O IEC 60071-2 §4.3.4 "
+        "estabelece a correção pelo fator Ka, calculado para altitude H em metros:"
+    )
+    rpt.add_equation(omml.eq_ka_altitude(), "Fator de correção por altitude — Ka (IEC 60071-2)")
+    rpt.add_body(
+        "O isolamento efetivo é reduzido para U_corr = U_nominal / Ka. "
+        "Por exemplo, a 1500 m Ka ≈ 1,20, reduzindo a suportabilidade em ~17%. "
+        "Este fator é crítico em projetos de linhas nas regiões Sul e Centro-Oeste do Brasil."
+    )
+
+    rpt.add_heading2("3.3 Distância de escoamento e poluição")
+    rpt.add_body(
+        "A distância de escoamento (creepage) é o comprimento da trajetória superficial "
+        "do isolador entre os terminais energizado e aterrado. A poluição deposita sais "
+        "condutores na superfície do isolador, criando um caminho resistivo que pode "
+        "resultar em flashover a tensões inferiores ao NBI. A distância mínima requerida "
+        "é proporcional à tensão máxima e ao nível de poluição ambiental (SPS — Specific "
+        "Creepage Distance, em mm/kV, conforme IEC 60815):"
+    )
+    rpt.add_equation(omml.eq_creepage(), "Distância de escoamento mínima (IEC 60815)")
 
     # Resultados
     rpt.add_heading1("Resultados Obtidos")
@@ -263,13 +315,42 @@ def report_coord_isolamento(rpt: BKReport, results: Dict[str, Any], cfg: Dict[st
         "especificação de para-raios de óxido metálico."
     )
 
-    rpt.add_heading1("Metodologia")
-    rpt.add_body("A verificação do NBI da cadeia de isoladores segue o critério:")
-    rpt.add_equation(omml.eq_coord_nbi(), "Critério de atendimento ao NBI")
+    rpt.add_heading1("3. Metodologia")
+
+    rpt.add_heading2("3.1 Níveis de isolamento (BIL/NBI)")
     rpt.add_body(
-        "A onda de impulso atmosférico normalizada 1.2/50 µs é utilizada para verificar "
-        "a suportabilidade dos equipamentos. O para-raios é especificado pela tensão residual "
-        "e energia dissipada durante os surtos."
+        "A coordenação de isolamento estabelece os níveis de suportabilidade dos equipamentos "
+        "de forma que haja proteção em cascata: primeiro o para-raios limita a sobretensão, "
+        "depois o isolador suporta o remanescente. O NBI (Nível Básico de Impulso, ou BIL) "
+        "é o valor de pico da onda de impulso atmosférico padronizada (1,2/50 µs) que o "
+        "equipamento deve suportar sem flashover. O critério de coordenação é:"
+    )
+    rpt.add_equation(omml.eq_coord_nbi(), "Critério de coordenação — V_impulso ≥ NBI (kV)")
+    rpt.add_body(
+        "A onda 1,2/50 µs é o padrão do IEC 60060-1 porque representa a envoltória "
+        "estatística das ondas de raio medidas em campo, com frente de 1,2 µs e cauda "
+        "de 50 µs. A verificação exige que a tensão suportável da cadeia de isoladores "
+        "(N_discos × V_impulso_disco) supere o NBI especificado pelo IEC 60071-1."
+    )
+
+    rpt.add_heading2("3.2 Para-raios de óxido metálico (MOV)")
+    rpt.add_body(
+        "Os para-raios de óxido metálico (ZnO) são escolhidos em vez dos carburundum "
+        "porque apresentam característica V-I altamente não-linear: conduzem praticamente "
+        "sem corrente em tensão nominal e limitam a tensão residual em surtos. "
+        "A especificação envolve três parâmetros críticos: "
+        "(1) tensão de operação contínua (MCOV); "
+        "(2) tensão residual a 10 kA (V_res), que define a proteção oferecida; "
+        "(3) energia absorvida por evento (kJ/kV). "
+        "A margem de proteção é: MP = (NBI − V_res) / NBI × 100% ≥ 20% (IEC 60099-4)."
+    )
+
+    rpt.add_heading2("3.3 Número de isoladores na cadeia")
+    rpt.add_body(
+        "O número de discos tipo pino é determinado para duas condições de poluição "
+        "(conforme IEC 60815 e ABNT NBR 7326): condição normal (SPS ≥ 16 mm/kV) e "
+        "condição de poluição severa (SPS ≥ 25 mm/kV). O critério de poluição governa "
+        "o projeto em regiões costeiras ou industriais."
     )
 
     rpt.add_heading1("Resultados Obtidos")
@@ -392,12 +473,33 @@ def report_religamento(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, An
         "garantindo que as sobretensões transitórias não excedam os limites de isolamento."
     )
 
-    rpt.add_heading1("Metodologia")
-    rpt.add_body("O fator de sobretensão durante o religamento é modelado por:")
-    rpt.add_equation(omml.eq_reclosing_fo(), "Fator de sobretensão transitória")
+    rpt.add_heading1("3. Metodologia")
+
+    rpt.add_heading2("3.1 Sobretensão de religamento e carga aprisionada")
     rpt.add_body(
-        "Onde V_trap é a tensão aprisionada (pu), α é o coeficiente de amortecimento "
-        "e f₀ é a frequência natural de oscilação da linha."
+        "Quando a linha é desenergizada por abertura do disjuntor, a carga capacitiva "
+        "retém uma tensão aprisionada (trapped charge). No momento do religamento, "
+        "a diferença entre a tensão da fonte e a tensão aprisionada pode gerar um "
+        "transitório de alta amplitude — potencialmente o dobro da tensão nominal. "
+        "O modelo exponencialmente amortecido captura a oscilação natural da linha:"
+    )
+    rpt.add_equation(omml.eq_reclosing_fo(), "Fator de sobretensão transitória de religamento")
+    rpt.add_body(
+        "onde V_trap é a tensão aprisionada (pu), α = R/(2L) é o coeficiente de "
+        "amortecimento (s⁻¹) e f₀ = 1/(2π√LC) é a frequência natural de oscilação da "
+        "linha (Hz). O religamento deve ocorrer em uma janela de tempo em que o FO "
+        "instantâneo seja menor que o limite de isolamento (tipicamente 1,5–2,0 pu)."
+    )
+
+    rpt.add_heading2("3.2 Determinação das janelas de religamento")
+    rpt.add_body(
+        "A análise identifica os intervalos de tempo em que o FO(t) cai abaixo do "
+        "limite admissível. O tempo morto padrão (typically 300–500 ms) deve ser "
+        "ajustado para cair dentro de uma janela aceitável. "
+        "Para linhas longas ou com alta indutância, as janelas podem ser muito estreitas, "
+        "exigindo uso de resistores de pré-inserção (pre-insertion resistors) para "
+        "amortecer o transitório — neste caso o estudo deve ser refeito com o circuito "
+        "de amortecimento modelado (IEEE C37.04 §5.4)."
     )
 
     rpt.add_heading1("Resultados Obtidos")
@@ -484,12 +586,33 @@ def report_emi(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
         "de segurança."
     )
 
-    rpt.add_heading1("Metodologia")
-    rpt.add_body("A tensão induzida por acoplamento magnético é proporcional à impedância mútua:")
-    rpt.add_equation(omml.eq_emi_induced(), "Tensão induzida por acoplamento")
+    rpt.add_heading1("3. Metodologia")
+
+    rpt.add_heading2("3.1 Acoplamento magnético indutivo")
     rpt.add_body(
-        "Onde ω é a frequência angular, M é a impedância mútua efetiva (H/m), I é a corrente "
-        "de fase (A) e L é o comprimento de paralelismo (km)."
+        "A tensão induzida num duto ou linha de comunicação paralela é causada pelo fluxo "
+        "magnético variável gerado pela corrente da linha de transmissão. A grandeza "
+        "determinante é a impedância mútua M (H/m), que depende da separação lateral, "
+        "da profundidade dos condutores e da resistividade do solo. O uso de M complexa "
+        "em vez de M real é fundamental para incluir o retorno de corrente pelo solo "
+        "(método de Carson-Clem), que pode aumentar M em até 50% para solos resistivos:"
+    )
+    rpt.add_equation(omml.eq_emi_induced(), "Tensão induzida por acoplamento magnético (V/km)")
+    rpt.add_body(
+        "onde ω = 2πf, M é a impedância mútua efetiva (H/m), I é a corrente de sequência "
+        "zero ou de desequilíbrio da linha (A) e L é o comprimento de paralelismo (km). "
+        "Em regime normal, o somatório vetorial das correntes das três fases tende a zero, "
+        "reduzindo a indução. O valor máximo ocorre durante falta fase-terra (corrente 3I₀)."
+    )
+
+    rpt.add_heading2("3.2 Critérios de segurança")
+    rpt.add_body(
+        "Os limites de segurança são estabelecidos conforme o tipo de infraestrutura: "
+        "(a) dutos e tubulações: V_contínua ≤ 60 V/km (segurança pessoal, DNIT); "
+        "V_falta ≤ 300 V/km (CIGRÉ TB 95); "
+        "(b) linhas de comunicação: campo longitudinal E ≤ 1–5 V/m (ITU-T K.68, "
+        "dependendo do tipo de circuito). Ultrapassar esses limites exige estudos "
+        "detalhados de mitigação (blindagem, aterramento adicional, separação)."
     )
 
     rpt.add_heading1("Resultados Obtidos")
@@ -559,12 +682,46 @@ def report_fluxo_potencia(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str,
         "em estudo, verificando o atendimento aos critérios operativos de tensão (0.95–1.05 pu)."
     )
 
-    rpt.add_heading1("Metodologia")
-    rpt.add_body("O método de Newton-Raphson resolve o sistema iterativamente:")
-    rpt.add_equation(omml.eq_power_flow_newton(), "Iteração de Newton-Raphson")
+    rpt.add_heading1("3. Metodologia")
+
+    rpt.add_heading2("3.1 Equações de balanço de potência")
     rpt.add_body(
-        "Onde J é a matriz Jacobiana, ΔP e ΔQ são os mismatches de potência ativa e "
-        "reativa, e Δθ e ΔV são as correções de ângulo e magnitude da tensão."
+        "O fluxo de potência em regime permanente é governado pelas equações de balanço "
+        "em cada barra k da rede, que expressam que a potência injetada (geração − carga) "
+        "deve ser igual à potência que flui para a rede através das admitâncias. "
+        "Para uma rede de n barras:"
+    )
+    rpt.add_equation(omml.eq_power_balance(), "Balanço de potência ativa por barra")
+    rpt.add_body(
+        "onde Vᵢ e Vₖ são as magnitudes de tensão, θᵢₖ = θᵢ − θₖ é a diferença angular "
+        "entre as barras i e k, Gᵢₖ e Bᵢₖ são os elementos da matriz admitância nodal Ybus. "
+        "Este sistema não-linear possui 2(n−1) equações com 2(n−1) incógnitas (θ e |V|)."
+    )
+
+    rpt.add_heading2("3.2 Método de Newton-Raphson — convergência quadrática")
+    rpt.add_body(
+        "Newton-Raphson é o método padrão da indústria (ONS, ENERCASE, PSS/E) porque "
+        "converge em poucos ciclos para problemas bem condicionados. A convergência quadrática "
+        "significa que o número de algarismos corretos dobra a cada iteração — em contraste "
+        "com a convergência linear do Gauss-Seidel. A iteração corrige Δθ e Δ|V| "
+        "simultaneamente pela resolução do sistema linear:"
+    )
+    rpt.add_equation(omml.eq_newton_raphson_full(), "Sistema linear de Newton-Raphson")
+    rpt.add_body(
+        "onde H, N, M, L são as submatrizes da Jacobiana ∂P/∂θ, ∂P/∂V, ∂Q/∂θ, ∂Q/∂V. "
+        "As correções ΔP e ΔQ são os mismatches (desvios entre potência calculada e especificada). "
+        "O critério de convergência é |ΔP|, |ΔQ| < ε = 10⁻⁶ pu. "
+        "Caso o método não convirja, pode indicar infactibilidade da solução (colapso de tensão)."
+    )
+
+    rpt.add_heading2("3.3 Tipos de barras")
+    rpt.add_body(
+        "Para fechar o sistema de equações, cada barra recebe um tipo que define quais "
+        "variáveis são especificadas e quais são calculadas: "
+        "(1) barra SLACK (referência angular θ = 0, |V| especificado) — fornece o balanço "
+        "global de potência; "
+        "(2) barra PV (P e |V| especificados, θ e Q calculados) — representa geradores; "
+        "(3) barra PQ (P e Q especificados, |V| e θ calculados) — representa cargas e barras de carga."
     )
 
     rpt.add_heading1("Resultados Obtidos")
