@@ -970,3 +970,133 @@ def eq_power_balance():
         ]),
     )
 
+
+# ─── Funções adicionadas: equações convertidas de texto inline ───────────────
+
+def eq_skin_depth():
+    """δ = √(2ρ / ωμ₀) — profundidade de penetração de corrente (skin effect)"""
+    return build_omath_para(
+        math_text("δ"),
+        math_op(" = "),
+        radical(None, [
+            fraction(
+                [math_num("2"), math_text("ρ")],
+                [math_text("ω"), subscript([math_text("μ")], [math_num("0")])]
+            )
+        ]),
+    )
+
+
+def eq_kron_reduction():
+    """Z'_fase = Z_ff − Z_fg · Z_gg⁻¹ · Z_gf — redução de Kron (eliminação do cabo guarda)"""
+    return build_omath_para(
+        superscript(
+            [subscript([math_text("Z")], [math_text("fase")])],
+            [math_op("′")]
+        ),
+        math_op(" = "),
+        subscript([math_text("Z")], [math_text("ff")]),
+        math_op(" − "),
+        subscript([math_text("Z")], [math_text("fg")]),
+        math_op(" · "),
+        superscript(
+            [subscript([math_text("Z")], [math_text("gg")])],
+            [math_op("−1")]
+        ),
+        math_op(" · "),
+        subscript([math_text("Z")], [math_text("gf")]),
+    )
+
+
+def eq_electric_field_resultant():
+    """|E| = √(|Ext|² + |Eyt|²) — módulo do campo elétrico resultante"""
+    return build_omath_para(
+        delimiters([math_text("E")], "|", "|"),
+        math_op(" = "),
+        radical(None, [
+            superscript(
+                [delimiters([subscript([math_text("Ė")], [math_text("xt")])], "|", "|")],
+                [math_num("2")]
+            ),
+            math_op(" + "),
+            superscript(
+                [delimiters([subscript([math_text("Ė")], [math_text("yt")])], "|", "|")],
+                [math_num("2")]
+            ),
+        ]),
+    )
+
+
+def eq_electric_image_coord():
+    """y_img = −yᵢ — coordenada y da carga imagem (método das imagens)"""
+    return build_omath_para(
+        subscript([math_text("y")], [math_text("img")]),
+        math_op(" = −"),
+        subscript([math_text("y")], [math_text("i")]),
+    )
+
+
+def eq_angular_freq():
+    """ω = 2πf — frequência angular"""
+    return build_omath_para(
+        math_text("ω"),
+        math_op(" = 2π"),
+        math_text("f"),
+    )
+
+
+def eq_mu0():
+    """μ₀ = 4π × 10⁻⁷ H/m — permeabilidade magnética do vácuo"""
+    return build_omath_para(
+        subscript([math_text("μ")], [math_num("0")]),
+        math_op(" = 4π × "),
+        superscript([math_num("10")], [math_op("−7")]),
+        math_op("  H/m"),
+    )
+
+
+def eq_volt_corr_altitude():
+    """V_corr = V_ref · Ka — tensão suportável corrigida pela altitude"""
+    return build_omath_para(
+        subscript([math_text("V")], [math_text("corr")]),
+        math_op(" = "),
+        subscript([math_text("V")], [math_text("ref")]),
+        math_op(" · "),
+        subscript([math_text("K")], [math_text("a")]),
+    )
+
+
+def eq_reclosing_params():
+    """t_dead = t_arco + t_deionização — tempo morto de religamento"""
+    return build_omath_para(
+        subscript([math_text("t")], [math_text("dead")]),
+        math_op(" = "),
+        subscript([math_text("t")], [math_text("arco")]),
+        math_op(" + "),
+        subscript([math_text("t")], [math_text("deion")]),
+    )
+
+
+def eq_corona_margin():
+    """margem (%) = (Vd − V_fase) / V_fase × 100 — margem de corona"""
+    return build_omath_para(
+        math_text("margem"),
+        math_op(" (%) = "),
+        fraction(
+            [subscript([math_text("V")], [math_text("d")]),
+             math_op(" − "),
+             subscript([math_text("V")], [math_text("fase")])],
+            [subscript([math_text("V")], [math_text("fase")])]
+        ),
+        math_op(" × 100"),
+    )
+
+
+def eq_peek_exponent():
+    """expoente Peek = 0,301 / √(δ · r) — curvatura superficial"""
+    return build_omath_para(
+        fraction(
+            [math_num("0,301")],
+            [radical(None, [math_text("δ"), math_op(" · "), math_text("r")])]
+        ),
+    )
