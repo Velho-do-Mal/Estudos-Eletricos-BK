@@ -129,22 +129,15 @@ class BKReport:
         h3.paragraph_format.space_after = Pt(0)
 
     # ----------------------------------------------------------------
-    # Header — conforme modelo de referência (linha única, direita, itálico)
+    # Header — REMOVIDO conforme modelo de referência (sem cabeçalho)
     # ----------------------------------------------------------------
     def _setup_header(self):
         section = self.doc.sections[0]
         header = section.header
         header.is_linked_to_previous = False
-
-        # Linha única: "BK Engenharia · {titulo}" — itálico, azul BK, 9pt, alinhado à direita
-        p1 = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-        p1.clear()
-        p1.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run = p1.add_run(f"BK Engenharia · {self.titulo_estudo}")
-        run.font.name = "Calibri"
-        run.font.size = Pt(9)
-        run.font.italic = True
-        run.font.color.rgb = BK_BLUE
+        # Limpar qualquer parágrafo existente para garantir cabeçalho vazio
+        for p in header.paragraphs:
+            p.clear()
 
     # ----------------------------------------------------------------
     # Footer com numero de pagina — conforme modelo (direita, 9pt)

@@ -624,8 +624,12 @@ def report_emi(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
     )
     rpt.add_equation(omml.eq_emi_induced(), "Tensão induzida por acoplamento magnético (V/km)")
     rpt.add_body(
-        "onde ω = 2πf, M é a impedância mútua efetiva (H/m), I é a corrente de sequência "
-        "zero ou de desequilíbrio da linha (A) e L é o comprimento de paralelismo (km). "
+        "onde M é a impedância mútua efetiva (H/m), I é a corrente de sequência zero "
+        "ou de desequilíbrio da linha (A) e L é o comprimento de paralelismo (km). "
+        "A frequência angular é:"
+    )
+    rpt.add_equation(omml.eq_angular_freq(), "Frequência angular ω (rad/s)")
+    rpt.add_body(
         "Em regime normal, o somatório vetorial das correntes das três fases tende a zero, "
         "reduzindo a indução. O valor máximo ocorre durante falta fase-terra (corrente 3I₀)."
     )
@@ -805,7 +809,4 @@ def report_fluxo_potencia(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str,
         ax.axhline(1.0, color="#333333", linestyle="-", alpha=0.3)
         ax.set_xlabel("Barra")
         ax.set_ylabel("|V| (pu)")
-        ax.set_title("Perfil de Tensão nas Barras")
-        ax.set_ylim(0.9, 1.1)
-        ax.legend()
-        ax.grid(True, alpha=0.3, axis="y")
+        ax.set_ti

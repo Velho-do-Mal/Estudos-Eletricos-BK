@@ -528,10 +528,12 @@ def report_corona(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
     rpt.add_heading2("3.2 Gradiente crítico de corona (Peek)")
     rpt.add_body(
         "O campo elétrico superficial crítico acima do qual a ionização do ar se inicia "
-        "é dado pela fórmula de Peek. O expoente 0,301/√(δ·r) captura a influência da "
-        "curvatura superficial — condutores finos têm campo mais concentrado na superfície "
-        "e coronam com gradiente menor:"
+        "é dado pela fórmula de Peek. O expoente que captura a influência da curvatura "
+        "superficial — condutores finos têm campo mais concentrado e coronam com gradiente "
+        "menor — é dado por:"
     )
+    rpt.add_equation(omml.eq_peek_exponent(), "Expoente de curvatura superficial (Peek)")
+    rpt.add_body("O gradiente crítico completo é:")
     rpt.add_equation(omml.eq_peek_corona(), "Gradiente crítico de Peek — Ec (kV/cm)")
     rpt.add_body(
         "O fator m₀ penaliza condições adversas: m₀ = 1,0 (condutor polido, seco), "
@@ -547,10 +549,11 @@ def report_corona(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
     )
     rpt.add_equation(omml.eq_corona_voltage(), "Tensão crítica visual de corona — Vd (kV)")
     rpt.add_body(
-        "A margem é calculada como: margem (%) = (Vd − V_fase) / V_fase × 100%. "
         "Valores positivos indicam ausência de corona; valores negativos indicam corona ativa. "
-        "A prática de projeto adota margem mínima de 10% para condição de chuva."
+        "A prática de projeto adota margem mínima de 10% para condição de chuva. "
+        "A margem percentual é calculada por:"
     )
+    rpt.add_equation(omml.eq_corona_margin(), "Margem de corona (%)")
 
     rpt.add_heading2("3.4 Cabo-guarda e corona")
     _tem_cabo_guarda = cfg.get("cabo_guarda", True)
