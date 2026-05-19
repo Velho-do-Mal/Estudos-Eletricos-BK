@@ -466,6 +466,79 @@ def report_parametros(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any
 
 
 # ====================================================================
+# Helpers de figuras para report_parametros
+# ====================================================================
+
+def _plot_pi_model(R: float, X: float, B: float, L_km: float):
+    """Desenha diagrama do circuito pi equivalente."""
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.set_xlim(-1, 11)
+    ax.set_ylim(-2, 4)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    ax.plot([0, 0], [-1, 3], color="#084C89", linewidth=3)
+    ax.text(0, 3.3, "Vs", ha="center", fontsize=12, fontweight="bold", color="#084C89")
+
+    ax.plot([10, 10], [-1, 3], color="#084C89", linewidth=3)
+    ax.text(10, 3.3, "Vr", ha="center", fontsize=12, fontweight="bold", color="#084C89")
+
+    rect = plt.Rectangle((3.5, 0.7), 3, 1.6, fill=True, facecolor="#E8F0FE",
+                          edgecolor="#084C89", linewidth=2)
+    ax.add_patch(rect)
+    ax.text(5, 1.5, f"Z = {R:.2f} + j{X:.2f} Ω", ha="center", va="center",
+            fontsize=9, fontweight="bold", color="#084C89")
+    ax.text(5, 1.0, f"(L = {L_km:.0f} km)", ha="center", va="center",
+            fontsize=8, color="#666666")
+
+    ax.plot([0, 3.5], [1.5, 1.5], color="#333333", linewidth=2)
+    ax.plot([6.5, 10], [1.5, 1.5], color="#333333", linewidth=2)
+
+    ax.plot([1.5, 1.5], [1.5, -0.5], color="#333333", linewidth=1.5)
+    ax.plot([1.5, 1.5], [-0.5, -1], color="#333333", linewidth=1.5)
+    rect_y1 = plt.Rectangle((1.0, -0.5), 1.0, 0.8, fill=True, facecolor="#FFF3E0",
+                             edgecolor="#FB8C00", linewidth=1.5)
+    ax.add_patch(rect_y1)
+    B_half = B / 2 * 1e6
+    ax.text(1.5, -0.1, f"jB'L/2\n{B_half:.2f} µS", ha="center", va="center",
+            fontsize=7, color="#E65100")
+
+    ax.plot([8.5, 8.5], [1.5, -0.5], color="#333333", linewidth=1.5)
+    ax.plot([8.5, 8.5], [-0.5, -1], color="#333333", linewidth=1.5)
+    rect_y2 = plt.Rectangle((8.0, -0.5), 1.0, 0.8, fill=True, facecolor="#FFF3E0",
+                             edgecolor="#FB8C00", linewidth=1.5)
+    ax.add_patch(rect_y2)
+    ax.text(8.5, -0.1, f"jB'L/2\n{B_half:.2f} µS", ha="center", va="center",
+            fontsize=7, color="#E65100")
+
+    ax.plot([0, 10], [-1, -1], color="#333333", linewidth=1, linestyle="--")
+    ax.text(5, -1.5, "Modelo π equivalente", ha="center", fontsize=11,
+            fontweight="bold", color="#084C89")
+
+    return fig
+
+
+def _plot_params_comparison(circuits: list):
+    """Gráfico de barras comparando parâmetros entre circuitos."""
+    n = len(circuits)
+    labels = [f"Circ. {i+1}" for i in range(n)]
+    params = {
+        "R' (Ω/km)": [c.get("R_ohm_km", 0) for c in circuits],
+        "X' (Ω/km)": [c.get("X_ohm_km", 0) for c in circuits],
+        "Zc (Ω)":    [c.get("Zc_ohm", 0) for c in circuits],
+        "SIL (MW)":  [c.get("SIL_MW", 0) for c in circuits],
+    }
+    fig, axes = plt.subplots(1, 4, figsize=(14, 4))
+    colors = ["#1565C0", "#00897B", "#FB8C00", "#7B1FA2"]
+    for ax, (name, vals), color in zip(axes, params.items(), colors):
+        ax.bar(labels, vals, color=color, alpha=0.85)
+        ax.set_title(name, fontsize=10)
+        ax.grid(True, alpha=0.3, axis="y")
+    fig.suptitle("Comparação de Parâmetros entre Circuitos", fontsize=12, fontweight="bold")
+    return fig
+
+
+# ====================================================================
 # 2. CORONA
 # ====================================================================
 
@@ -1282,20 +1355,19 @@ def report_ri_ra(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
     _tem_cabo_guarda = cfg.get("cabo_guarda", True)
     if _tem_cabo_guarda:
         rpt.add_body(
-            "O(s) cabo(s)-guarda presente(s) na linha possuem gradiente superficial muito abaixo "
-            "do gradiente crítico de corona (tipicamente < 5 kV/cm para cabos de aço-alumínio), "
-            "pois operam aterrados em potencial nulo. Por isso, sua contribuição individual de RI "
-            "e RA é desprezível em comparação com os condutores de fase. "
-            "O cálculo das fórmulas EPRI é, portanto, aplicado somente às fases. "
-            "O cabo-guarda exerce influência indireta na geometria (altura equivalente), que "
-            "já está incorporada na determinação do gradiente superficial das fases."
+            "O cabo-guarda aterrado nas torres opera em potencial nulo. Por isso, o seu "
+            "gradiente superficial induzido — causado apenas pelo acoplamento capacitivo "
+            "com as fases — é tipicamente muito inferior ao gradiente crítico de Peek "
+            "(< 3 kV/cm para OPGW/EHS vs. Ec_crit ≈ 18–24 kV/cm). Portanto, o cabo-guarda "
+            "não contribui significativamente para RI ou RA e o estudo é aplicado apenas "
+            "aos condutores de fase."
         )
     else:
         rpt.add_body(
-            "A linha não possui cabo-guarda. Neste contexto, o cálculo de RI e RA é aplicado "
-            "exclusivamente aos condutores de fase — o que corresponde ao caso geral das "
-            "fórmulas EPRI, que são formuladas para fase. Não há impacto metodológico "
-            "pela ausência do cabo-guarda neste módulo."
+            "A linha não possui cabo-guarda. O estudo de RI e RA é aplicado somente aos "
+            "condutores de fase. A ausência do cabo-guarda não altera o método de cálculo "
+            "de RI/RA — os modelos EPRI são baseados exclusivamente nos parâmetros dos "
+            "condutores de fase."
         )
 
     rpt.add_heading1("Resultados Obtidos")
@@ -1305,7 +1377,7 @@ def report_ri_ra(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
             rpt.add_kpi_table([
                 ("RI borda (chuva)", f"{circ.get('RI_edge_chuva', 0):.1f}", "dBµV/m"),
                 ("RA borda (chuva)", f"{circ.get('RA_edge_chuva', 0):.1f}", "dBA"),
-                ("Ec superficial",   f"{circ.get('Ec_kV_cm', 0):.2f}",      "kV/cm"),
+                ("Ec superficial", f"{circ.get('Ec_kV_cm', 0):.2f}", "kV/cm"),
                 ("Atende RI", "SIM" if not circ.get("exceeds_RI", False) else "NÃO", ""),
                 ("Atende RA", "SIM" if not circ.get("exceeds_RA", False) else "NÃO", ""),
             ])
