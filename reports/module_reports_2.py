@@ -31,6 +31,27 @@ def report_blindagem(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]
     rpt.add_toc()
     rpt.add_page_break()
 
+    # ── Verificação: linha sem cabo-guarda ─────────────────────────────
+    if not cfg.get("cabo_guarda", True):
+        rpt.add_heading1("1. Aplicabilidade")
+        rpt.add_body(
+            "A linha em estudo não possui cabos-guarda (para-raios aéreos). "
+            "Nesse caso, a análise de blindagem pelo Modelo Eletrogeométrico (EGM) e a avaliação "
+            "de backflashover não se aplicam, pois ambas pressupõem a existência de cabo-guarda "
+            "instalado no topo da torre."
+        )
+        rpt.add_body(
+            "Para linhas sem cabo-guarda, a proteção contra descargas atmosféricas deve ser "
+            "avaliada por metodologia alternativa (ex.: blindagem por objeto adjacente, SPDA "
+            "dedicado por torre, ou aceitação de risco por critério estatístico de saídas por "
+            "raio conforme CIGRÉ TB 63). A decisão de suprimir o cabo-guarda deve ser "
+            "fundamentada em estudo específico de relação custo-benefício e nível ceráunico local."
+        )
+        rpt.add_body(
+            "Referências: IEEE Std 1243-1997 §4; CIGRÉ TB 63 §3.2; ABNT NBR 5419:2015 Parte 2."
+        )
+        return  # Encerra o relatório de blindagem aqui
+
     rpt.add_heading1("Introdução")
     rpt.add_body(
         "A blindagem contra descargas atmosféricas é um requisito fundamental no projeto de "
@@ -210,8 +231,9 @@ def report_vmax_insulation(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str
         "estabelece a correção pelo fator Ka, calculado para altitude H em metros:"
     )
     rpt.add_equation(omml.eq_ka_altitude(), "Fator de correção por altitude — Ka (IEC 60071-2)")
+    rpt.add_body("O isolamento efetivo é reduzido pela relação:")
+    rpt.add_equation(omml.eq_volt_corr_altitude(), "Tensão corrigida por altitude")
     rpt.add_body(
-        "O isolamento efetivo é reduzido para U_corr = U_nominal / Ka. "
         "Por exemplo, a 1500 m Ka ≈ 1,20, reduzindo a suportabilidade em ~17%. "
         "Este fator é crítico em projetos de linhas nas regiões Sul e Centro-Oeste do Brasil."
     )
@@ -485,9 +507,12 @@ def report_religamento(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, An
     )
     rpt.add_equation(omml.eq_reclosing_fo(), "Fator de sobretensão transitória de religamento")
     rpt.add_body(
-        "onde V_trap é a tensão aprisionada (pu), α = R/(2L) é o coeficiente de "
-        "amortecimento (s⁻¹) e f₀ = 1/(2π√LC) é a frequência natural de oscilação da "
-        "linha (Hz). O religamento deve ocorrer em uma janela de tempo em que o FO "
+        "onde V_trap é a tensão aprisionada (pu). "
+        "Os parâmetros do circuito de religamento são:"
+    )
+    rpt.add_equation(omml.eq_reclosing_params(), "Parâmetros do circuito de religamento — α e f₀")
+    rpt.add_body(
+        "O religamento deve ocorrer em uma janela de tempo em que o FO "
         "instantâneo seja menor que o limite de isolamento (tipicamente 1,5–2,0 pu)."
     )
 
@@ -784,33 +809,3 @@ def report_fluxo_potencia(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str,
         ax.set_ylim(0.9, 1.1)
         ax.legend()
         ax.grid(True, alpha=0.3, axis="y")
-        rpt.add_figure_from_matplotlib(fig, "Perfil de tensão nas barras do sistema")
-
-    rpt.add_heading1("Conclusão")
-    if conv:
-        rpt.add_body(
-            f"O fluxo de potência convergiu em {iters} iterações com mismatch máximo de "
-            f"{mismatch:.2e} pu. O perfil de tensão e os fluxos de potência foram determinados "
-            f"com sucesso."
-        )
-        if "buses" in results:
-            v_min = min(b.get("V_pu", 1) for b in results["buses"])
-            v_max = max(b.get("V_pu", 1) for b in results["buses"])
-            if 0.95 <= v_min and v_max <= 1.05:
-                rpt.add_body(
-                    f"Todas as tensões estão dentro da faixa operativa (0.95–1.05 pu). "
-                    f"V mín = {v_min:.4f} pu, V máx = {v_max:.4f} pu."
-                )
-            else:
-                rpt.add_body(
-                    f"Existem barras com tensão fora da faixa operativa: "
-                    f"V mín = {v_min:.4f} pu, V máx = {v_max:.4f} pu. "
-                    f"Recomenda-se avaliar compensação reativa ou ajuste de taps."
-                )
-    else:
-        rpt.add_body(
-            "O fluxo de potência NÃO convergiu no número máximo de iterações. "
-            "Verifique os dados de entrada (impedâncias, potências, configuração de barras)."
-        )
-    rpt.add_body(SOFTWARE_NOTE)
-    rpt.add_references_section(REFS_PF)

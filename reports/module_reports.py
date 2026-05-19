@@ -231,9 +231,11 @@ def report_parametros(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any
         "Além disso, a resistência aumenta com a temperatura. A correção é feita por:"
     )
     rpt.add_equation(omml.eq_rac(), "Resistência AC com skin effect")
+    rpt.add_body("onde a profundidade de penetração é:")
+    rpt.add_equation(omml.eq_skin_depth(), "Profundidade de penetração — δ_skin (m)")
     rpt.add_body(
-        "onde δ_skin = √(2ρ/ωμ) é a profundidade de penetração. Para condutores ACSR "
-        "em 60 Hz, o aumento de R_ac sobre R_dc varia de ~2% (cabo pequeno) a ~10% (cabo grande)."
+        "Para condutores ACSR em 60 Hz, o aumento de R_ac sobre R_dc varia "
+        "de ~2% (cabo pequeno) a ~10% (cabo grande)."
     )
 
     rpt.add_heading2("3.5 Impedância característica e potência natural (SIL)")
@@ -254,6 +256,40 @@ def report_parametros(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any
         "(<150 km) e adequado para comprimentos médios com correção hiperbólica:"
     )
     rpt.add_equation(omml.eq_pi_model(), "Modelo π equivalente da linha")
+
+    rpt.add_heading2("3.7 Cabo-guarda — redução de Kron")
+    _tem_cabo_guarda = cfg.get("cabo_guarda", True)
+    if _tem_cabo_guarda:
+        rpt.add_body(
+            "Quando a linha possui cabo-guarda aterrado nas torres, a matriz de impedâncias "
+            "primitiva (3+n_g × 3+n_g) deve ser reduzida à forma 3×3 de fase pelo método "
+            "de Kron (eliminação gaussiana dos condutores com V = 0). Isso é necessário porque "
+            "o cabo-guarda modifica a impedância série efetiva das fases via acoplamento mútuo: "
+            "parte da corrente de desequilíbrio retorna pelo cabo-guarda em vez do solo, "
+            "reduzindo a reatância de sequência zero. "
+            "A impedância equivalente de fase após a redução de Kron é:"
+        )
+        rpt.add_equation(omml.eq_kron_reduction(), "Redução de Kron — impedância equivalente de fase")
+        rpt.add_body(
+            "onde Z_ff é a submatriz fase-fase, Z_fg a acoplamento fase-guarda, "
+            "Z_gg a autoimpedância do cabo-guarda e Z_gf = Z_fg^T."
+        )
+        rpt.add_body(
+            "Os resultados de R', X' e B' apresentados na seção seguinte já incluem "
+            "o efeito do(s) cabo(s)-guarda pela redução de Kron, conforme os dados de "
+            "entrada fornecidos."
+        )
+    else:
+        rpt.add_body(
+            "A linha em estudo não possui cabo-guarda. Neste caso, a matriz de impedâncias "
+            "primitiva é diretamente a matriz 3×3 de fase (ou 6×6 para circuito duplo), "
+            "sem necessidade de redução de Kron. "
+            "A principal consequência técnica é que a impedância de sequência zero Z₀ será "
+            "maior do que em uma linha equivalente com cabo-guarda, pois não há retorno "
+            "parcial de corrente pelo cabo-guarda — toda a corrente de retorno flui pelo solo "
+            "(modelo de Carson). Isso impacta os estudos de curto-circuito monofásico e a "
+            "coordenação de proteção de sequência zero."
+        )
 
     # 4. Resultados
     rpt.add_heading1("Resultados Obtidos")
@@ -516,6 +552,25 @@ def report_corona(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
         "A prática de projeto adota margem mínima de 10% para condição de chuva."
     )
 
+    rpt.add_heading2("3.4 Cabo-guarda e corona")
+    _tem_cabo_guarda = cfg.get("cabo_guarda", True)
+    if _tem_cabo_guarda:
+        rpt.add_body(
+            "O cabo-guarda opera em potencial nulo (aterrado em todas as torres). "
+            "Por isso, o gradiente superficial no cabo-guarda é induzido apenas pelo "
+            "acoplamento capacitivo com as fases — tipicamente muito abaixo do gradiente "
+            "crítico de Peek (< 3 kV/cm para OPGW/EHS vs. Ec_crit ≈ 18–24 kV/cm). "
+            "O estudo de corona é, portanto, aplicado exclusivamente aos condutores de fase."
+        )
+    else:
+        rpt.add_body(
+            "A linha não possui cabo-guarda. O estudo de corona é aplicado somente aos "
+            "condutores de fase. Esta situação não altera o método de cálculo — a ausência "
+            "do cabo-guarda tem efeito desprezível no gradiente superficial das fases, "
+            "pois o cabo-guarda aterrado contribui apenas marginalmente para a geometria "
+            "de campo nas fases."
+        )
+
     # Resultados
     rpt.add_heading1("Resultados Obtidos")
     rpt.add_heading2("Dados de Entrada")
@@ -681,15 +736,19 @@ def report_campos_em(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]
         "onde [Q̇] é a matriz das cargas complexas (C/m), [C] é a matriz de capacitâncias "
         "próprias e mútuas da linha (F/km) e [V̇] é a matriz das tensões fasoriais por fase. "
         "O Método das Imagens é aplicado para impor a condição de contorno de potencial zero "
-        "no plano do solo: cada condutor real tem uma imagem espelhada em y_img = −yᵢ com "
-        "carga de sinal oposto. A componente horizontal do campo em (x,y) resulta em:"
+        "no plano do solo: cada condutor real tem uma imagem espelhada de coordenada:"
+    )
+    rpt.add_equation(omml.eq_electric_image_coord(), "Coordenada da imagem elétrica (plano do solo)")
+    rpt.add_body(
+        "com carga de sinal oposto. A componente horizontal do campo em (x,y) resulta em:"
     )
     rpt.add_equation(omml.eq_msc_electric_field_x(), "Campo elétrico horizontal — MSC com imagens")
     rpt.add_body(
         "O segundo somatório representa a contribuição das imagens elétricas. "
-        "O campo resultante é calculado como: |E| = √(|Ėxt|² + |Ėyt|²) [V/m], "
-        "convertido para kV/m no relatório."
+        "O campo elétrico resultante é calculado por:"
     )
+    rpt.add_equation(omml.eq_electric_field_resultant(), "Campo elétrico resultante |E| (V/m)")
+    rpt.add_body("convertido para kV/m no relatório.")
     rpt.add_heading2("5.2 Campo Magnético — Imagens Complexas de Deri")
     rpt.add_body(
         "Para o campo magnético adota-se o Método das Imagens Complexas de Deri "
@@ -700,9 +759,12 @@ def report_campos_em(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]
     )
     rpt.add_equation(omml.eq_deri_depth(), "Profundidade complexa de retorno (Deri)")
     rpt.add_body(
-        "onde ρs é a resistividade do solo (Ω·m), ω = 2πf é a frequência angular e "
-        "μ₀ = 4π×10⁻⁷ H/m. A coordenada da imagem complexa do condutor i passa a ser:"
+        "onde ρs é a resistividade do solo (Ω·m), f é a frequência (Hz), "
+        "sendo a frequência angular e a permeabilidade do vácuo definidas por:"
     )
+    rpt.add_equation(omml.eq_angular_freq(), "Frequência angular ω (rad/s)")
+    rpt.add_equation(omml.eq_mu0(), "Permeabilidade magnética do vácuo μ₀ (H/m)")
+    rpt.add_body("A coordenada da imagem complexa do condutor i passa a ser:")
     rpt.add_equation(omml.eq_deri_image(), "Coordenada da imagem complexa de Deri")
     rpt.add_body(
         "O campo magnético resultante — somando condutores reais e suas imagens — é:"
@@ -714,10 +776,21 @@ def report_campos_em(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]
         "pode aumentar |B| em até 15%."
     )
     rpt.add_heading2("5.3 Considerações Gerais")
-    rpt.add_body(
-        "a) Os efeitos dos cabos para-raios são desprezados no cálculo do campo elétrico, "
-        "adotando condições mais desfavoráveis (conservador)."
-    )
+    _tem_cabo_guarda = cfg.get("cabo_guarda", True)
+    if _tem_cabo_guarda:
+        rpt.add_body(
+            "a) Os cabos para-raios estão presentes na torre, porém seus efeitos são desprezados "
+            "no cálculo do campo elétrico (potencial imposto = 0 via aterramento). "
+            "Esta hipótese é conservadora: o cabo-guarda aterrado tende a reduzir levemente o "
+            "campo elétrico nas fases adjacentes; ao ignorá-lo, o resultado calculado é um "
+            "limite superior do campo real."
+        )
+    else:
+        rpt.add_body(
+            "a) A linha não possui cabos para-raios. O cálculo considera somente os condutores "
+            "de fase, o que é a condição exata — não há simplificação ou hipótese conservadora "
+            "adicional relacionada a cabo-guarda."
+        )
     rpt.add_body(
         "b) A superfície do solo é tratada como plana e equipotencial (potencial nulo). "
         "As estruturas de suporte não são consideradas no modelo 2D."
@@ -1064,6 +1137,43 @@ def report_ampacidade(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any
         "com a variação de comprimento e carga mecânica no condutor."
     )
 
+    rpt.add_heading2("3.3 Cabo-guarda — ampacidade e carga mecânica")
+    _tem_cabo_guarda = cfg.get("cabo_guarda", True)
+    if _tem_cabo_guarda:
+        rpt.add_body(
+            "O cabo-guarda (EHS, OPGW ou similar) deve ter sua ampacidade verificada para a "
+            "corrente de desequilíbrio e corrente de falta que pode circular temporariamente. "
+            "Embora não conduza corrente de carga em regime permanente, durante curto-circuito "
+            "monofásico parte da corrente de falta retorna pelo cabo-guarda, podendo aquecê-lo "
+            "significativamente. A verificação segue os critérios de IEEE 738 com tempo de "
+            "exposição igual ao tempo de eliminação da falta. "
+            "Adicionalmente, o peso do cabo-guarda deve ser somado à carga mecânica da torre "
+            "no dimensionamento estrutural — geralmente o cabo-guarda representa 5–15% da "
+            "carga vertical nas torres extremas."
+        )
+        cg_key = cfg.get("cabo_guarda_tipo", None)
+        if cg_key and "guard_wire" in results:
+            gw = results["guard_wire"]
+            rpt.add_kpi_table([
+                ("Cabo-guarda", str(cg_key), "—"),
+                ("Corrente de falta (If)", f"{gw.get('If_kA', 0):.2f}", "kA"),
+                ("Tempo de exposição", f"{gw.get('t_fault_s', 0):.3f}", "s"),
+                ("Temperatura máx. (falta)", f"{gw.get('T_max_fault_C', 0):.1f}", "°C"),
+                ("Atende critério térmico", "SIM" if not gw.get("exceeds", False) else "NÃO", ""),
+            ])
+        else:
+            rpt.add_body(
+                "Os dados de ampacidade do cabo-guarda serão incluídos quando o tipo do "
+                "cabo-guarda e a corrente de falta forem informados em cfg['cabo_guarda_tipo'] "
+                "e results['guard_wire']."
+            )
+    else:
+        rpt.add_body(
+            "A linha não possui cabo-guarda. O estudo de ampacidade é, portanto, restrito "
+            "aos condutores de fase. Não há cálculo térmico ou mecânico adicional associado "
+            "a cabo-guarda neste relatório."
+        )
+
     # Resultados
     rpt.add_heading1("Resultados Obtidos")
     rpt.add_heading2("Dados de Entrada")
@@ -1165,6 +1275,26 @@ def report_ri_ra(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
         "Limites típicos adotados no Brasil: RI < 46 dBµV/m, RA < 50 dBA (chuva)."
     )
 
+    rpt.add_heading2("3.3 Influência do cabo-guarda")
+    _tem_cabo_guarda = cfg.get("cabo_guarda", True)
+    if _tem_cabo_guarda:
+        rpt.add_body(
+            "O(s) cabo(s)-guarda presente(s) na linha possuem gradiente superficial muito abaixo "
+            "do gradiente crítico de corona (tipicamente < 5 kV/cm para cabos de aço-alumínio), "
+            "pois operam aterrados em potencial nulo. Por isso, sua contribuição individual de RI "
+            "e RA é desprezível em comparação com os condutores de fase. "
+            "O cálculo das fórmulas EPRI é, portanto, aplicado somente às fases. "
+            "O cabo-guarda exerce influência indireta na geometria (altura equivalente), que "
+            "já está incorporada na determinação do gradiente superficial das fases."
+        )
+    else:
+        rpt.add_body(
+            "A linha não possui cabo-guarda. Neste contexto, o cálculo de RI e RA é aplicado "
+            "exclusivamente aos condutores de fase — o que corresponde ao caso geral das "
+            "fórmulas EPRI, que são formuladas para fase. Não há impacto metodológico "
+            "pela ausência do cabo-guarda neste módulo."
+        )
+
     rpt.add_heading1("Resultados Obtidos")
     if "circuits" in results:
         for i, circ in enumerate(results["circuits"]):
@@ -1172,7 +1302,7 @@ def report_ri_ra(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
             rpt.add_kpi_table([
                 ("RI borda (chuva)", f"{circ.get('RI_edge_chuva', 0):.1f}", "dBµV/m"),
                 ("RA borda (chuva)", f"{circ.get('RA_edge_chuva', 0):.1f}", "dBA"),
-                ("Ec superficial", f"{circ.get('Ec_kV_cm', 0):.2f}", "kV/cm"),
+                ("Ec superficial",   f"{circ.get('Ec_kV_cm', 0):.2f}",      "kV/cm"),
                 ("Atende RI", "SIM" if not circ.get("exceeds_RI", False) else "NÃO", ""),
                 ("Atende RA", "SIM" if not circ.get("exceeds_RA", False) else "NÃO", ""),
             ])
@@ -1180,108 +1310,26 @@ def report_ri_ra(rpt: BKReport, results: Dict[str, Any], cfg: Dict[str, Any]):
             if "distances_m" in circ and "RI_chuva" in circ:
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
                 d = circ["distances_m"]
-                ax1.plot(d, circ.get("RI_seco", []), label="RI seco", color="#1565C0")
-                ax1.plot(d, circ["RI_chuva"], label="RI chuva", color="#E53935")
+                ax1.plot(d, circ.get("RI_seco", []), label="RI seco",   color="#1565C0")
+                ax1.plot(d, circ["RI_chuva"],         label="RI chuva",  color="#E53935")
                 ax1.set_xlabel("Distância (m)")
                 ax1.set_ylabel("RI (dBµV/m)")
                 ax1.set_title(f"Interferência Radioelétrica – Circ. {i+1}")
-                ax1.legend()
-                ax1.grid(True, alpha=0.3)
+                ax1.legend(); ax1.grid(True, alpha=0.3)
 
-                ax2.plot(d, circ.get("RA_seco", []), label="RA seco", color="#1565C0")
+                ax2.plot(d, circ.get("RA_seco", []), label="RA seco",   color="#1565C0")
                 ax2.plot(d, circ.get("RA_chuva", []), label="RA chuva", color="#E53935")
                 ax2.set_xlabel("Distância (m)")
                 ax2.set_ylabel("RA (dBA)")
                 ax2.set_title(f"Ruído Audível – Circ. {i+1}")
-                ax2.legend()
-                ax2.grid(True, alpha=0.3)
+                ax2.legend(); ax2.grid(True, alpha=0.3)
                 rpt.add_figure_from_matplotlib(fig, f"Perfis de RI e RA – Circuito {i+1}")
 
     rpt.add_heading1("Conclusão")
     rpt.add_body(
         "Os níveis de RI e RA foram estimados conforme metodologia EPRI/CIGRÉ. "
         "Caso algum limite seja excedido, recomenda-se avaliar o aumento do diâmetro equivalente "
-        "do feixe, aumento do número de subcondutores ou melhoria das ferragens."
+        "do feixe, aumento do número de subcondutores ou melhoria das ferragens de fixação."
     )
     rpt.add_body(SOFTWARE_NOTE)
-    rpt.add_references_section(REFS_RIRA)
-
-
-# ====================================================================
-# Graficos auxiliares
-# ====================================================================
-
-def _plot_pi_model(R: float, X: float, B: float, L_km: float):
-    """Desenha diagrama do circuito pi equivalente."""
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.set_xlim(-1, 11)
-    ax.set_ylim(-2, 4)
-    ax.set_aspect("equal")
-    ax.axis("off")
-
-    # Barra esquerda (envio)
-    ax.plot([0, 0], [-1, 3], color="#084C89", linewidth=3)
-    ax.text(0, 3.3, "Vs", ha="center", fontsize=12, fontweight="bold", color="#084C89")
-
-    # Barra direita (recebimento)
-    ax.plot([10, 10], [-1, 3], color="#084C89", linewidth=3)
-    ax.text(10, 3.3, "Vr", ha="center", fontsize=12, fontweight="bold", color="#084C89")
-
-    # Impedancia serie (retangulo)
-    rect = plt.Rectangle((3.5, 0.7), 3, 1.6, fill=True, facecolor="#E8F0FE",
-                          edgecolor="#084C89", linewidth=2)
-    ax.add_patch(rect)
-    ax.text(5, 1.5, f"Z = {R:.2f} + j{X:.2f} Ω", ha="center", va="center",
-            fontsize=9, fontweight="bold", color="#084C89")
-    ax.text(5, 1.0, f"(L = {L_km:.0f} km)", ha="center", va="center",
-            fontsize=8, color="#666666")
-
-    # Linhas horizontais
-    ax.plot([0, 3.5], [1.5, 1.5], color="#333333", linewidth=2)
-    ax.plot([6.5, 10], [1.5, 1.5], color="#333333", linewidth=2)
-
-    # Y/2 esquerdo
-    ax.plot([1.5, 1.5], [1.5, -0.5], color="#333333", linewidth=1.5)
-    ax.plot([1.5, 1.5], [-0.5, -1], color="#333333", linewidth=1.5)
-    rect_y1 = plt.Rectangle((1.0, -0.5), 1.0, 0.8, fill=True, facecolor="#FFF3E0",
-                             edgecolor="#FB8C00", linewidth=1.5)
-    ax.add_patch(rect_y1)
-    B_half = B / 2 * 1e6  # µS
-    ax.text(1.5, -0.1, f"jB'L/2\n{B_half:.2f} µS", ha="center", va="center",
-            fontsize=7, color="#E65100")
-
-    # Y/2 direito
-    ax.plot([8.5, 8.5], [1.5, -0.5], color="#333333", linewidth=1.5)
-    ax.plot([8.5, 8.5], [-0.5, -1], color="#333333", linewidth=1.5)
-    rect_y2 = plt.Rectangle((8.0, -0.5), 1.0, 0.8, fill=True, facecolor="#FFF3E0",
-                             edgecolor="#FB8C00", linewidth=1.5)
-    ax.add_patch(rect_y2)
-    ax.text(8.5, -0.1, f"jB'L/2\n{B_half:.2f} µS", ha="center", va="center",
-            fontsize=7, color="#E65100")
-
-    # Terra
-    ax.plot([0, 10], [-1, -1], color="#333333", linewidth=1, linestyle="--")
-    ax.text(5, -1.5, "Modelo π equivalente", ha="center", fontsize=11,
-            fontweight="bold", color="#084C89")
-
-    return fig
-
-
-def _plot_params_comparison(circuits: list):
-    """Grafico de barras comparando parametros entre circuitos."""
-    n = len(circuits)
-    labels = [f"Circ. {i+1}" for i in range(n)]
-    params = {
-        "R' (Ω/km)": [c.get("R_ohm_km", 0) for c in circuits],
-        "X' (Ω/km)": [c.get("X_ohm_km", 0) for c in circuits],
-        "Zc (Ω)": [c.get("Zc_ohm", 0) for c in circuits],
-        "SIL (MW)": [c.get("SIL_MW", 0) for c in circuits],
-    }
-    fig, axes = plt.subplots(1, 4, figsize=(14, 4))
-    colors = ["#1565C0", "#00897B", "#FB8C00", "#7B1FA2"]
-    for ax, (name, vals), color in zip(axes, params.items(), colors):
-        ax.bar(labels, vals, color=color, alpha=0.85)
-        ax.set_title(name, fontsize=10)
-        ax.grid(True, alpha=0.3, axis="y")
-    fig.suptitle("Comparação de Parâmetros entre Circuitos", fontsize=12, fontweight="bold")
-    return fig
+    rpt.add_references_section(REFS_RI_RA)

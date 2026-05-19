@@ -96,7 +96,7 @@ class BKReport:
         pf.line_spacing = 1.15
         pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-        # Heading 1 — Titulo principal BK
+        # Heading 1 — conforme modelo: 16pt bold azul, espaço antes 24pt, depois 0
         h1 = self.doc.styles["Heading 1"]
         h1.font.name = "Calibri"
         h1.font.size = Pt(16)
@@ -104,10 +104,10 @@ class BKReport:
         h1.font.all_caps = False
         h1.font.color.rgb = BK_BLUE
         h1.paragraph_format.space_before = Pt(24)
-        h1.paragraph_format.space_after = Pt(6)
+        h1.paragraph_format.space_after = Pt(0)
         h1.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-        # Heading 2 — Subtitulo BK
+        # Heading 2 — conforme modelo: 13pt bold azul, espaço antes 10pt, depois 0
         h2 = self.doc.styles["Heading 2"]
         h2.font.name = "Calibri"
         h2.font.size = Pt(13)
@@ -115,59 +115,39 @@ class BKReport:
         h2.font.underline = False
         h2.font.color.rgb = BK_BLUE
         h2.paragraph_format.space_before = Pt(10)
-        h2.paragraph_format.space_after = Pt(4)
+        h2.paragraph_format.space_after = Pt(0)
         h2.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-        # Heading 3
+        # Heading 3 — conforme modelo: 11pt bold azul, espaço antes 10pt, depois 0
         h3 = self.doc.styles["Heading 3"]
         h3.font.name = "Calibri"
-        h3.font.size = Pt(12)
+        h3.font.size = Pt(11)
         h3.font.bold = True
         h3.font.italic = False
         h3.font.color.rgb = BK_BLUE
         h3.paragraph_format.space_before = Pt(10)
-        h3.paragraph_format.space_after = Pt(4)
+        h3.paragraph_format.space_after = Pt(0)
 
     # ----------------------------------------------------------------
-    # Header simplificado — conforme padrão do modelo de referência
+    # Header — conforme modelo de referência (linha única, direita, itálico)
     # ----------------------------------------------------------------
     def _setup_header(self):
         section = self.doc.sections[0]
         header = section.header
         header.is_linked_to_previous = False
 
-        # Linha 1: nome da empresa · titulo do documento
+        # Linha única: "BK Engenharia · {titulo}" — itálico, azul BK, 9pt, alinhado à direita
         p1 = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
         p1.clear()
-        p1.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        run_empresa = p1.add_run("BK Engenharia")
-        run_empresa.font.name = "Calibri"
-        run_empresa.font.size = Pt(9)
-        run_empresa.font.bold = True
-        run_empresa.font.color.rgb = BK_BLUE
-        run_sep = p1.add_run(f" · {self.titulo_estudo}")
-        run_sep.font.name = "Calibri"
-        run_sep.font.size = Pt(9)
-        run_sep.font.color.rgb = BK_GRAY
-
-        # Linha separadora
-        p1_border = parse_xml(
-            f'<w:pPr {nsdecls("w")}><w:pBdr>'
-            f'<w:bottom w:val="single" w:sz="4" w:space="1" w:color="1F4E79"/>' 
-            f'</w:pBdr></w:pPr>'
-        )
-        p1._p.insert(0, p1_border)
-
-        # Linha 2: codigo e revisao (alinhado à direita)
-        p2 = header.add_paragraph()
-        p2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run_cod = p2.add_run(f"{self.codigo_doc}  Rev. {self.revisao}")
-        run_cod.font.name = "Calibri"
-        run_cod.font.size = Pt(8)
-        run_cod.font.color.rgb = BK_GRAY
+        p1.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run = p1.add_run(f"BK Engenharia · {self.titulo_estudo}")
+        run.font.name = "Calibri"
+        run.font.size = Pt(9)
+        run.font.italic = True
+        run.font.color.rgb = BK_BLUE
 
     # ----------------------------------------------------------------
-    # Footer com numero de pagina — conforme padrão do modelo
+    # Footer com numero de pagina — conforme modelo (direita, 9pt)
     # ----------------------------------------------------------------
     def _setup_footer(self):
         section = self.doc.sections[0]
@@ -175,7 +155,7 @@ class BKReport:
         footer.is_linked_to_previous = False
 
         p = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         run_pre = p.add_run("Página ")
         run_pre.font.size = Pt(8)
         run_pre.font.name = "Calibri"
